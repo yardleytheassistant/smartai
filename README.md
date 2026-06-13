@@ -47,7 +47,9 @@ the heaviest model for everything. Defaults (override any via `.env`):
 Routing (`router.py`) picks by task shape: coding hints → coder, huge-context
 hints → long-context, otherwise by complexity (simple → worker, orchestration →
 orchestrator, hard → reasoner). `python main.py route "<task>"` shows the
-decision without running anything.
+decision without running anything. `python main.py fleet` reports which role
+models are actually live on the server (catch a missing pull before a 3am
+routine fails).
 
 Other models in a typical fleet map to alternates: `mistral-large` (creative /
 multilingual drafts), `gemma4:26b` or `phi4:14b` (cheap graders / cheapest
@@ -83,6 +85,26 @@ python main.py goal "write workspace/fizzbuzz.py and prove it runs" \
 
 On success the loop distills a lesson and updates the resume pointer; if it gets
 stuck it logs an open failure — both to durable memory.
+
+For sharper signal, grade against a **file-based rubric** (Outcomes-style) where
+each criterion is scored independently for partial credit and pinpointed gaps:
+
+```bash
+python main.py goal "write workspace/fizzbuzz.py and prove it runs" \
+    --rubric-file rubrics/fizzbuzz.md
+```
+
+`rubric.py` loads criteria from Markdown (one `- ` bullet each) or JSON (with
+weights and a `pass_threshold`); the verifier returns a weighted score and the
+exact unmet criteria.
+
+### Context compaction — long-run hygiene
+
+`compaction.py` keeps days-long sessions inside the context window: once the
+transcript exceeds `CONTEXT_CHAR_BUDGET`, completed earlier turns are summarized
+by the cheap worker model while the system prompt and the current turn stay
+verbatim. Compaction cuts at a user-message boundary so assistant/tool-call
+pairs are never split. On by default in `NovelAgent`.
 
 ### Durable memory — the 5-stage state file
 
@@ -223,6 +245,9 @@ router.py            # task→model routing + configurable safety guardrail
 tools.py             # sandboxed tool registry (memory, knowledge, delegate, …)
 agent.py             # NovelAgent — OpenAI-compatible tool-calling loop
 subagents.py         # sub-agent delegation (role-routed, depth-guarded)
+compaction.py        # context compaction for long sessions
+rubric.py + rubrics/ # file-based gradable criteria (Outcomes-style)
+fleet.py             # which role models are live on the server
 memory.py            # durable 5-stage state file (STATE.md)
 skills.py + skills/  # procedural memory that compounds
 knowledge.py + knowledge/  # retrieval layer over versioned reference docs
@@ -235,7 +260,7 @@ evals.py + evals/    # eval-suite runner that feeds failures back in
 workflows.py         # dynamic workflow primitives (5 patterns)
 worktrees.py         # git-worktree helpers for parallel safety
 routines.py          # scheduled/triggered runs (cron + built-in daemon)
-main.py              # CLI (chat, goal, route, memory, skills, kb, reflect, eval, routine)
+main.py              # CLI (chat, goal, route, fleet, memory, skills, kb, reflect, eval, routine)
 setup.sh             # one-time install + model build
 tests/               # offline tests (no model/GPU needed)
 ```

@@ -18,6 +18,7 @@ from dataclasses import dataclass
 
 from agent import make_client
 from config import config
+from rubric import Rubric
 
 _VERIFIER_SYSTEM = """\
 You are an exacting, impartial verifier. You did not create the work you are
@@ -26,6 +27,15 @@ and completeness; penalize unmet criteria, hand-waving, and unverified claims.
 
 Respond with ONLY a single JSON object, no prose, no code fences:
 {"met": <true|false>, "score": <number 0.0-1.0>, "feedback": "<specific, actionable gaps; empty if met>"}
+"""
+
+_RUBRIC_SYSTEM = """\
+You are an exacting, impartial verifier. You did not create the work you are
+grading. Grade the artifact against EACH numbered rubric criterion independently.
+
+Respond with ONLY a single JSON object, no prose, no code fences:
+{"criteria": [{"id": "<criterion id>", "met": <true|false>, "feedback": "<gap if unmet>"}, ...]}
+Include every criterion exactly once.
 """
 
 
@@ -54,7 +64,9 @@ class Verifier:
         self.model = model or config.grader_model
         self.client = client if client is not None else make_client()
 
-    def grade(self, *, goal: str, artifact: str, rubric: str | None = None) -> Verdict:
+    def grade(self, *, goal: str, artifact: str, rubric: "str | Rubric | None" = None) -> Verdict:
+        if isinstance(rubric, Rubric):
+            return self.grade_rubric(goal=goal, artifact=artifact, rubric=rubric)
         rubric_block = f"\nRUBRIC (gradable criteria):\n{rubric}\n" if rubric else ""
         user = (
             f"GOAL:\n{goal}\n{rubric_block}\n"
@@ -78,5 +90,40 @@ class Verifier:
             feedback = str(data.get("feedback", "")).strip()
         except (ValueError, json.JSONDecodeError, TypeError):
             # Unparseable verdict is treated as "not met" so the loop keeps working.
+            met, score, feedback = False, 0.0, f"Verifier returned unparseable output: {raw[:300]}"
+        return Verdict(met=met, score=score, feedback=feedback, raw=raw)
+
+    def grade_rubric(self, *, goal: str, artifact: str, rubric: Rubric) -> Verdict:
+        """Grade each criterion independently; aggregate to a weighted score."""
+        user = (
+            f"GOAL:\n{goal}\n\nRUBRIC CRITERIA:\n{rubric.as_prompt()}\n\n"
+            f"ARTIFACT TO GRADE:\n{artifact}\n\nGrade each criterion. Return only the JSON."
+        )
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": _RUBRIC_SYSTEM},
+                {"role": "user", "content": user},
+            ],
+            temperature=config.grader_temperature,
+            max_tokens=config.max_tokens,
+        )
+        raw = response.choices[0].message.content or ""
+        weight = {c.id: c.weight for c in rubric.criteria}
+        try:
+            data = _extract_json(raw)
+            results = {str(r.get("id")): r for r in data.get("criteria", [])}
+            earned = 0.0
+            gaps: list[str] = []
+            for c in rubric.criteria:
+                r = results.get(c.id, {})
+                if bool(r.get("met", False)):
+                    earned += c.weight
+                else:
+                    gaps.append(f"[{c.id}] {r.get('feedback') or c.text}")
+            score = earned / rubric.total_weight
+            met = score >= rubric.pass_threshold
+            feedback = "" if met else "Unmet criteria:\n" + "\n".join(gaps)
+        except (ValueError, json.JSONDecodeError, TypeError):
             met, score, feedback = False, 0.0, f"Verifier returned unparseable output: {raw[:300]}"
         return Verdict(met=met, score=score, feedback=feedback, raw=raw)

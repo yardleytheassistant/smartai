@@ -13,6 +13,7 @@ system prompt so the session resumes instead of restarting.
 
 from __future__ import annotations
 
+import compaction
 import memory as memory_mod
 import tools
 from config import config
@@ -35,10 +36,14 @@ class NovelAgent:
         use_tools: bool = True,
         load_memory: bool = False,
         skills_query: str | None = None,
+        compact: bool = True,
+        compact_model: str | None = None,
     ):
         self.client = client if client is not None else make_client()
         self.model = model or config.model
         self.use_tools = use_tools
+        self.compact = compact
+        self.compact_model = compact_model or config.worker_model
 
         prompt = system_prompt or config.system_prompt
         if load_memory:
@@ -64,6 +69,11 @@ class NovelAgent:
         schema = tools.openai_schema() if self.use_tools else None
 
         for _ in range(config.max_steps):
+            # Manage context: summarize completed earlier turns if we're over budget.
+            if self.compact and compaction.estimate_chars(self.messages) > config.context_char_budget:
+                self.messages = compaction.compact(
+                    self.messages, client=self.client, model=self.compact_model
+                )
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=self.messages,

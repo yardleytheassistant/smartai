@@ -4,8 +4,9 @@ Usage:
     python main.py                         # start a chat REPL
     python main.py "your task"             # run a single task (routed + guardrailed)
     python main.py goal "your goal"        # run a self-correcting maker/verifier loop
-        [--rubric "criteria"] [--max-iterations N]
+        [--rubric "criteria" | --rubric-file PATH] [--max-iterations N]
     python main.py route "your task"       # show the routing/safety decision only
+    python main.py fleet                   # which role models are live on the server
     python main.py memory                  # print the durable state file
     python main.py skills [list|show NAME] # inspect procedural-memory skills
     python main.py kb [search Q|add NAME C]# query/extend the knowledge base
@@ -89,7 +90,7 @@ def show_route(task: str) -> None:
     )
 
 
-def run_goal(task: str, rubric: str | None, max_iterations: int | None) -> None:
+def run_goal(task: str, rubric, max_iterations: int | None) -> None:
     def on_event(kind: str, data: dict) -> None:
         if kind == "iteration":
             console.print(f"[dim]→ iteration {data['n']}/{data['max']}…[/dim]")
@@ -204,6 +205,21 @@ def cmd_kb(args: list[str]) -> None:
         console.print("[red]usage:[/red] kb [search <query> | add <name> <content>]")
 
 
+def cmd_fleet(_args: list[str]) -> None:
+    import fleet as fleet_mod
+
+    try:
+        statuses = fleet_mod.check()
+    except Exception as exc:  # noqa: BLE001 - server may be down
+        console.print(f"[red]could not reach the model server:[/red] {exc}")
+        return
+    lines = []
+    for s in statuses:
+        mark = "[green]✓ up[/green]" if s.available else "[red]✗ missing[/red]"
+        lines.append(f"{mark}  [bold]{s.role:<13}[/bold] {s.model}")
+    console.print(Panel("\n".join(lines), title="fleet", border_style="cyan", expand=False))
+
+
 def cmd_reflect(_args: list[str]) -> None:
     import reflect as reflect_mod
 
@@ -236,15 +252,20 @@ def repl() -> None:
         console.print(Panel(answer, title="novel", border_style="green", expand=False))
 
 
-def _parse_goal_args(args: list[str]) -> tuple[str, str | None, int | None]:
+def _parse_goal_args(args: list[str]):
     task_parts: list[str] = []
-    rubric: str | None = None
+    rubric = None
     max_iterations: int | None = None
     i = 0
     while i < len(args):
         arg = args[i]
         if arg == "--rubric" and i + 1 < len(args):
             rubric = args[i + 1]
+            i += 2
+        elif arg == "--rubric-file" and i + 1 < len(args):
+            from rubric import Rubric
+
+            rubric = Rubric.from_file(args[i + 1])
             i += 2
         elif arg == "--max-iterations" and i + 1 < len(args):
             max_iterations = int(args[i + 1])
@@ -287,6 +308,9 @@ def main() -> None:
         return
     if args[0] == "reflect":
         cmd_reflect(args[1:])
+        return
+    if args[0] == "fleet":
+        cmd_fleet(args[1:])
         return
     run_once(" ".join(args))
 

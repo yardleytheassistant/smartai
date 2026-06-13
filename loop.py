@@ -35,7 +35,7 @@ class LoopResult:
 def goal_loop(
     task: str,
     *,
-    rubric: str | None = None,
+    rubric=None,  # str | rubric.Rubric | None — passed through to the verifier
     max_iterations: int | None = None,
     maker_model: str | None = None,
     grader_model: str | None = None,

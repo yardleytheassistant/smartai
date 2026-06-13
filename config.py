@@ -79,6 +79,9 @@ class Config:
     enable_shell: bool = field(default_factory=lambda: _get_bool("AGENT_ENABLE_SHELL", False))
     workspace: str = field(default_factory=lambda: os.getenv("AGENT_WORKSPACE", "./workspace"))
     system_prompt: str = field(default_factory=lambda: os.getenv("AGENT_SYSTEM_PROMPT", DEFAULT_SYSTEM_PROMPT))
+    # Context management: compact earlier turns once the transcript exceeds this
+    # character budget (a cheap proxy for tokens) so long sessions don't overflow.
+    context_char_budget: int = field(default_factory=lambda: int(os.getenv("CONTEXT_CHAR_BUDGET", "48000")))
 
     # --- Self-improvement layer ---
     # Max maker->verifier iterations in a goal loop before giving up.
