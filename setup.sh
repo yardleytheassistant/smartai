@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # One-time setup for smartai on a Mac Studio (Apple Silicon).
-# Installs Ollama, pulls the open-source Hermes base, builds the custom
+# Installs Ollama, pulls the open-source base, builds the custom
 # 'smartai' model from it, and creates a Python environment.
 set -euo pipefail
 
 cd "$(dirname "$0")"
 
-BASE_MODEL="${SMARTAI_BASE_MODEL:-hermes3:70b}"
+BASE_MODEL="${SMARTAI_BASE_MODEL:-qwen3.5:122b}"
 MODEL_NAME="${SMARTAI_MODEL_NAME:-novel}"
 
 echo "==> Installing Ollama (if missing)"

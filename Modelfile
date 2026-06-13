@@ -1,19 +1,21 @@
 # Novel — smartai's custom tool-using agent model, built on an open-source base.
 #
-# This is the project's own model. It takes an open-source Nous Hermes
-# checkpoint (pulled by Ollama) and bakes in Novel's identity, sampling defaults
-# tuned for reliable function/tool calling, and a larger context window so the
-# self-improving agent loop (maker -> verifier -> memory) has room to work.
+# This is the project's own model: the orchestrator. It takes a strong local
+# open-source instruct model and bakes in Novel's identity, sampling defaults
+# tuned for reliable function/tool calling, and a large context window so the
+# self-improving agent loop (maker -> verifier -> memory + skills) has room.
+#
+# Base: qwen3.5:122b — strong instruct + tool calling, multilingual, and the
+# practical RAM sweet spot (~81 GB) for driving days-long sessions. Swap to
+# qwen3:235b (HEAVY_MODEL) for max-capability planning, or a smaller model for
+# speed, via build_model.sh with SMARTAI_BASE_MODEL set.
 #
 # Build it:
-#   ollama pull hermes3:70b          # the open-source base (done by setup.sh)
+#   ollama pull qwen3.5:122b         # the open-source base (you already have it)
 #   ollama create novel -f Modelfile
 #   ollama run novel
-#
-# To build on a different open base (e.g. a smaller or larger Hermes), use
-# build_model.sh with SMARTAI_BASE_MODEL set, which swaps the FROM line for you.
 
-FROM hermes3:70b
+FROM qwen3.5:122b
 
 # --- Identity ---------------------------------------------------------------
 # Default system prompt for bare `ollama run novel`. The Python agent sends its
@@ -34,8 +36,8 @@ PARAMETER top_p 0.9
 PARAMETER top_k 40
 PARAMETER repeat_penalty 1.05
 
-# Roomy context so multi-step tool transcripts (tool results + memory + history) fit.
-PARAMETER num_ctx 8192
+# Roomy context so multi-step transcripts (tool results + memory + skills + history) fit.
+PARAMETER num_ctx 32768
 
 # ChatML turn boundaries — keep generations from running past a turn.
 PARAMETER stop "<|im_end|>"

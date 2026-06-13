@@ -64,7 +64,9 @@ def goal_loop(
         emit("iteration", n=i, max=max_iterations)
         # Fresh maker each iteration: it gets the original task + verifier feedback,
         # not a polluted transcript. Memory is consulted via the system prompt.
-        maker = NovelAgent(model=maker_model, client=client, load_memory=use_memory)
+        maker = NovelAgent(
+            model=maker_model, client=client, load_memory=use_memory, skills_query=task
+        )
         output = maker.run(current_input)
 
         verdict = verifier.grade(goal=task, artifact=output, rubric=rubric)

@@ -2,10 +2,14 @@
 
 Usage:
     python main.py                         # start a chat REPL
-    python main.py "your task"             # run a single task and exit
+    python main.py "your task"             # run a single task (routed + guardrailed)
     python main.py goal "your goal"        # run a self-correcting maker/verifier loop
         [--rubric "criteria"] [--max-iterations N]
+    python main.py route "your task"       # show the routing/safety decision only
     python main.py memory                  # print the durable state file
+    python main.py skills [list|show NAME] # inspect procedural-memory skills
+    python main.py eval CASES.jsonl        # run an eval suite [--skill NAME to compound]
+    python main.py routine [list|run NAME|serve|install-cron]   # scheduled/triggered runs
 """
 
 import sys
@@ -14,6 +18,7 @@ from rich.console import Console
 from rich.panel import Panel
 
 import memory as memory_mod
+import router
 from agent import NovelAgent
 from config import config
 from loop import goal_loop
@@ -51,9 +56,35 @@ def _banner() -> None:
 
 
 def run_once(task: str) -> None:
-    agent = NovelAgent(load_memory=True)
+    decision = router.decide(task)
+    if decision.action in {"block", "review"}:
+        console.print(
+            Panel(
+                f"[bold]{decision.action.upper()}[/bold] — {decision.note}\n"
+                f"Set SAFETY_POLICY=route or allow in .env to change this.",
+                title="safety guardrail", border_style="red", expand=False,
+            )
+        )
+        return
+    if decision.domain:
+        console.print(f"[yellow]guardrail:[/yellow] {decision.note}")
+    agent = NovelAgent(model=decision.model, load_memory=True, skills_query=task)
     answer = agent.run(task, on_tool=_show_tool)
-    console.print(Panel(answer, title="answer", border_style="green", expand=False))
+    console.print(Panel(answer, title=f"answer · {decision.model}", border_style="green", expand=False))
+
+
+def show_route(task: str) -> None:
+    d = router.decide(task)
+    console.print(
+        Panel(
+            f"model      [cyan]{d.model}[/cyan]\n"
+            f"complexity [cyan]{d.complexity}[/cyan]\n"
+            f"domain     [cyan]{d.domain or '—'}[/cyan]\n"
+            f"action     [cyan]{d.action}[/cyan]\n"
+            f"{d.note}",
+            title="routing decision", border_style="cyan", expand=False,
+        )
+    )
 
 
 def run_goal(task: str, rubric: str | None, max_iterations: int | None) -> None:
@@ -80,6 +111,82 @@ def show_memory() -> None:
         console.print("[dim]No durable memory yet.[/dim]")
         return
     console.print(Panel(mem.render(), title="durable memory", border_style="cyan", expand=False))
+
+
+def cmd_routine(args: list[str]) -> None:
+    import routines as routines_mod
+
+    sub = args[0] if args else "list"
+    if sub == "list":
+        rs = routines_mod.load_routines()
+        if not rs:
+            console.print("[dim]No routines defined. Add one to routines.json.[/dim]")
+            return
+        for r in rs:
+            trig = r.schedule if r.trigger == "schedule" else (r.watch_path or r.trigger)
+            state = "on" if r.enabled else "off"
+            console.print(f"[bold]{r.name}[/bold] ([{state}]) · {r.trigger} {trig} → {r.goal}")
+    elif sub == "run" and len(args) > 1:
+        def on_event(kind, data):
+            if kind == "verdict":
+                console.print(f"  [dim]iter {data['n']}: {'met' if data['met'] else 'not met'}[/dim]")
+        result = routines_mod.run_by_name(args[1], on_event=on_event)
+        console.print(f"[green]done[/green]: {'met' if result.met else 'unmet'} in {result.iterations} iter")
+    elif sub == "serve":
+        console.print("[green]scheduler running[/green] (Ctrl-C to stop). Use under nohup/tmux for laptop-off runs.")
+        try:
+            routines_mod.serve()
+        except KeyboardInterrupt:
+            console.print("\n[dim]stopped[/dim]")
+    elif sub == "install-cron":
+        text = routines_mod.install_cron()
+        console.print(Panel(text, title="installed crontab", border_style="green", expand=False))
+    else:
+        console.print("[red]usage:[/red] routine [list | run <name> | serve | install-cron]")
+
+
+def cmd_skills(args: list[str]) -> None:
+    import skills as skills_mod
+
+    sub = args[0] if args else "list"
+    if sub == "list":
+        sk = skills_mod.load_skills()
+        if not sk:
+            console.print(f"[dim]No skills in {skills_mod.skills_root()}.[/dim]")
+            return
+        for s in sk:
+            console.print(f"[bold]{s.name}[/bold] — {s.description}")
+    elif sub == "show" and len(args) > 1:
+        s = skills_mod.get(args[1])
+        if s is None:
+            console.print(f"[red]no skill named {args[1]!r}[/red]")
+            return
+        console.print(Panel(s.render(), title=f"skill · {s.name}", border_style="cyan", expand=False))
+    else:
+        console.print("[red]usage:[/red] skills [list | show <name>]")
+
+
+def cmd_eval(args: list[str]) -> None:
+    import evals as evals_mod
+
+    if not args:
+        console.print("[red]usage:[/red] eval <cases.jsonl> [--skill name]")
+        return
+    path = args[0]
+    skill = args[args.index("--skill") + 1] if "--skill" in args else None
+    cases = evals_mod.load_cases(path)
+
+    def run_fn(case):
+        return NovelAgent(load_memory=True, skills_query=case.input).run(case.input)
+
+    def on_result(r):
+        mark = "[green]✓[/green]" if r.verdict.met else "[red]✗[/red]"
+        console.print(f"  {mark} {r.case.id} (score {r.verdict.score:.2f})")
+
+    report = evals_mod.run_evals(
+        cases, run_fn, on_result=on_result, compound_into_skill=skill, record_memory=True
+    )
+    console.print(Panel(report.summary(), title="eval report", border_style="green", expand=False))
 
 
 def repl() -> None:
@@ -134,6 +241,18 @@ def main() -> None:
         return
     if args[0] == "memory":
         show_memory()
+        return
+    if args[0] == "route":
+        show_route(" ".join(args[1:]))
+        return
+    if args[0] == "routine":
+        cmd_routine(args[1:])
+        return
+    if args[0] == "skills":
+        cmd_skills(args[1:])
+        return
+    if args[0] == "eval":
+        cmd_eval(args[1:])
         return
     run_once(" ".join(args))
 

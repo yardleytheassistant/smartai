@@ -1,0 +1,19 @@
+[
+  {
+    "name": "nightly-eval-compounding",
+    "goal": "Re-run the CI-triage eval suite against the latest skills. For any newly-failing case, investigate and append the confirmed failure mode to the ci-triage skill; update STATE.md with what changed.",
+    "trigger": "schedule",
+    "schedule": "0 7 * * *",
+    "rubric": "Every eval case was run; new failure modes (if any) were written into skills/ci-triage.md; STATE.md last-session was updated.",
+    "max_iterations": 3,
+    "enabled": true
+  },
+  {
+    "name": "ci-failure-triage",
+    "goal": "A CI run just failed. Read the latest logs in workspace/ci-latest.log, classify the failure using the ci-triage skill, draft a fix for tractable cases, and escalate the rest in STATE.md.",
+    "trigger": "event",
+    "watch_path": "workspace/ci-failed.flag",
+    "rubric": "Failure classified; a fix drafted or a clear escalation recorded in STATE.md.",
+    "enabled": true
+  }
+]

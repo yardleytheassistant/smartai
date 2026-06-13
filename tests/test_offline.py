@@ -108,21 +108,36 @@ def test_default_model_is_novel(monkeypatch):
     assert Config().model == "novel"
 
 
-def test_roles_fall_back_to_primary_model(monkeypatch):
-    for var in ("LLM_MODEL", "WORKER_MODEL", "GRADER_MODEL"):
+def test_role_defaults_map_to_fleet(monkeypatch):
+    for var in ("LLM_MODEL", "WORKER_MODEL", "GRADER_MODEL", "REASONER_MODEL",
+                "CODER_MODEL", "LONG_CONTEXT_MODEL", "HEAVY_MODEL", "FALLBACK_MODEL"):
         monkeypatch.delenv(var, raising=False)
     sys.modules.pop("config", None)
     from config import Config
     cfg = Config()
-    assert cfg.worker_model == cfg.model == "novel"
-    assert cfg.grader_model == "novel"
+    assert cfg.model == "novel"
+    assert cfg.worker_model == "qwen3.6:35b"
+    assert cfg.grader_model == "deepseek-r1:32b"
+    assert cfg.reasoner_model == "deepseek-r1:70b"
+    assert cfg.coder_model == "qwen3-coder:30b"
+    assert cfg.long_context_model == "llama4:scout"
+    assert cfg.heavy_model == "qwen3:235b"
+    # Sensitive-domain tasks fall back to the strongest reasoner by default.
+    assert cfg.fallback_model == "deepseek-r1:70b"
+
+
+def test_blank_role_override_falls_back_to_primary(monkeypatch):
+    monkeypatch.setenv("WORKER_MODEL", "")
+    sys.modules.pop("config", None)
+    from config import Config
+    assert Config().worker_model == "novel"
 
 
 # --- Modelfile (the custom model definition) --------------------------------
 
-def test_modelfile_defines_novel_on_hermes_base():
+def test_modelfile_defines_novel_on_open_base():
     text = (ROOT / "Modelfile").read_text()
-    assert "FROM hermes3" in text, "must build on the open-source Hermes base"
+    assert "FROM qwen3.5" in text, "must build on the local open-source base"
     assert "SYSTEM" in text and "Novel" in text
     # Sampling + context params that make tool calling reliable.
     for param in ("temperature", "num_ctx", "stop"):

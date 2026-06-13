@@ -47,12 +47,27 @@ class Config:
     # Local servers don't check the key, but the OpenAI client requires a non-empty value.
     api_key: str = field(default_factory=lambda: os.getenv("LLM_API_KEY", "ollama"))
 
-    # --- Model routing (all open-source) ---
-    # `model` is the primary/orchestrator model. worker/grader default to it but
-    # can be routed to other open models (e.g. a smaller Hermes/Qwen for grading).
+    # --- Model routing (all open-source, mapped to a local fleet) ---
+    # `model` is the primary/orchestrator model — the custom 'novel' built on
+    # qwen3.5:122b. The other roles default to specific local open models chosen
+    # for their strengths; override any of them via env.
     model: str = field(default_factory=lambda: os.getenv("LLM_MODEL", "novel"))
-    worker_model: str = field(default_factory=lambda: os.getenv("WORKER_MODEL", ""))
-    grader_model: str = field(default_factory=lambda: os.getenv("GRADER_MODEL", ""))
+    # Fan-out / simple high-volume work: fast MoE generalist.
+    worker_model: str = field(default_factory=lambda: os.getenv("WORKER_MODEL", "qwen3.6:35b"))
+    # Independent verifier: fast reasoning distill, different family from the maker.
+    grader_model: str = field(default_factory=lambda: os.getenv("GRADER_MODEL", "deepseek-r1:32b"))
+    # Hard-but-bounded reasoning subtasks the orchestrator delegates.
+    reasoner_model: str = field(default_factory=lambda: os.getenv("REASONER_MODEL", "deepseek-r1:70b"))
+    # Coding-shaped tasks: a coding specialist.
+    coder_model: str = field(default_factory=lambda: os.getenv("CODER_MODEL", "qwen3-coder:30b"))
+    # Huge-context tasks (whole repo / long documents).
+    long_context_model: str = field(default_factory=lambda: os.getenv("LONG_CONTEXT_MODEL", "llama4:scout"))
+    # Max-capability planning (verified strongest; heavy — reserve for the hardest).
+    heavy_model: str = field(default_factory=lambda: os.getenv("HEAVY_MODEL", "qwen3:235b"))
+    # Open-source vision-language model for vision self-checks.
+    vision_model: str = field(default_factory=lambda: os.getenv("VISION_MODEL", "kimi-vl"))
+    # Model that sensitive-domain tasks fall back to (blank => reasoner_model).
+    fallback_model: str = field(default_factory=lambda: os.getenv("FALLBACK_MODEL", ""))
 
     temperature: float = field(default_factory=lambda: float(os.getenv("LLM_TEMPERATURE", "0.7")))
     max_tokens: int = field(default_factory=lambda: int(os.getenv("LLM_MAX_TOKENS", "4096")))
@@ -70,11 +85,25 @@ class Config:
     max_iterations: int = field(default_factory=lambda: int(os.getenv("GOAL_MAX_ITERATIONS", "4")))
     # Durable memory / state file (relative to the workspace), the 5-stage store.
     memory_file: str = field(default_factory=lambda: os.getenv("AGENT_MEMORY_FILE", "STATE.md"))
+    # Procedural memory: directory of compounding Skills.
+    skills_dir: str = field(default_factory=lambda: os.getenv("AGENT_SKILLS_DIR", "skills"))
+    # Routines registry (saved configs) and where routine run logs land.
+    routines_file: str = field(default_factory=lambda: os.getenv("AGENT_ROUTINES_FILE", "routines.json"))
+
+    # --- Safety policy (open-source analog of the Mythos boundary) ---
+    # route | review | block | allow  (see router.decide)
+    safety_policy: str = field(default_factory=lambda: os.getenv("SAFETY_POLICY", "route").strip().lower())
 
     def __post_init__(self) -> None:
-        # Roles fall back to the primary model so the system runs out of the box.
+        # Empty role overrides fall back sensibly so the system always resolves.
         self.worker_model = self.worker_model or self.model
         self.grader_model = self.grader_model or self.model
+        self.reasoner_model = self.reasoner_model or self.model
+        self.coder_model = self.coder_model or self.model
+        self.long_context_model = self.long_context_model or self.model
+        self.heavy_model = self.heavy_model or self.model
+        # Sensitive-domain tasks fall back to the strongest reasoning model.
+        self.fallback_model = self.fallback_model or self.reasoner_model
 
 
 config = Config()

@@ -1,4 +1,4 @@
-"""Tool definitions for the Hermes agent.
+"""Tool definitions for the Novel agent.
 
 Each tool is a plain Python function registered with @tool. The registry
 exposes them in OpenAI function-calling format and dispatches calls by name.

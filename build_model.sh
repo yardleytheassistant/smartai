@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# Build the custom `novel` agent model from the open-source Hermes base.
+# Build the custom `novel` agent model from the open-source base.
 #
 # Usage:
 #   ./build_model.sh                         # builds 'novel' from Modelfile
 #   SMARTAI_MODEL_NAME=novel-fast \
-#   SMARTAI_BASE_MODEL=hermes3:8b ./build_model.sh   # smaller base, custom name
+#   SMARTAI_BASE_MODEL=phi4:14b ./build_model.sh     # smaller/faster base, custom name
+#   SMARTAI_MODEL_NAME=novel-max \
+#   SMARTAI_BASE_MODEL=qwen3:235b ./build_model.sh   # max-capability base
 #
-# The Modelfile is the canonical definition (FROM hermes3:70b). If
+# The Modelfile is the canonical definition (FROM qwen3.5:122b). If
 # SMARTAI_BASE_MODEL is set to something else, we build from a temporary copy
 # with the FROM line swapped, so a single Modelfile is the source of truth.
 set -euo pipefail

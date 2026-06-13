@@ -34,6 +34,7 @@ class NovelAgent:
         client=None,
         use_tools: bool = True,
         load_memory: bool = False,
+        skills_query: str | None = None,
     ):
         self.client = client if client is not None else make_client()
         self.model = model or config.model
@@ -44,6 +45,13 @@ class NovelAgent:
             summary = memory_mod.load().summary_for_prompt()
             if summary:
                 prompt = f"{prompt}\n\n{summary}"
+        if skills_query:
+            # Procedural memory: fold in the most relevant Skills for this task.
+            import skills as skills_mod
+
+            block = skills_mod.prompt_block(skills_query)
+            if block:
+                prompt = f"{prompt}\n\n{block}"
         self.messages: list[dict] = [{"role": "system", "content": prompt}]
 
     def run(self, user_input: str, *, on_tool=None) -> str:

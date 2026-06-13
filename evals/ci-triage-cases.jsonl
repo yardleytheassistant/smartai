@@ -1,0 +1,4 @@
+{"id": "missing-secret", "input": "CI failed: 'STRIPE_WEBHOOK_SECRET is not set' in the webhook test job. Classify and recommend an action.", "rubric": "Classifies as 'env'; recommends escalating to a human rather than auto-fixing."}
+{"id": "flaky-e2e", "input": "CI failed: e2e checkout test failed once, then passed on retry with no code change. Classify and recommend an action.", "rubric": "Classifies as 'flake'; recommends retry-once-then-file, not a code change."}
+{"id": "deterministic-bug", "input": "CI failed: a unit test fails every run since commit abc123 changed the auth middleware order. Classify and recommend an action.", "rubric": "Classifies as 'bug' tied to the recent commit; recommends drafting a fix."}
+{"id": "dependency-bump", "input": "CI failed: tests break immediately after a dependency was bumped from 2.1 to 3.0. Classify and recommend an action.", "rubric": "Classifies as 'dependency'; recommends drafting a rollback of the version bump."}

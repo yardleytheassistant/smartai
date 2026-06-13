@@ -102,3 +102,40 @@ def loop_until_done(
         if done(out, outputs):
             break
     return outputs
+
+
+def classify_and_act(
+    item: T,
+    classifier: Callable[[T], str],
+    handlers: dict[str, Callable[[T], R]],
+    *,
+    default: Callable[[T], R] | None = None,
+) -> R:
+    """Route an item to the handler for its class (model routing, triage).
+
+    `classifier(item)` returns a label; the matching handler runs. Falls back to
+    `default` if the label is unknown (raises if there is no default).
+    """
+    label = classifier(item)
+    handler = handlers.get(label, default)
+    if handler is None:
+        raise KeyError(f"no handler for class {label!r} and no default")
+    return handler(item)
+
+
+def tournament(
+    items: Sequence[T],
+    compare: Callable[[T, T], T],
+) -> T:
+    """King-of-the-hill pairwise ranking for taste-based choices.
+
+    `compare(a, b)` returns whichever it prefers. Useful for design/naming tasks
+    where there's no objective rubric — only relative preference. Returns the
+    item that beats all challengers.
+    """
+    if not items:
+        raise ValueError("tournament needs at least one item")
+    champion = items[0]
+    for challenger in items[1:]:
+        champion = compare(champion, challenger)
+    return champion
