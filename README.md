@@ -47,9 +47,10 @@ the heaviest model for everything. Defaults (override any via `.env`):
 Routing (`router.py`) picks by task shape: coding hints → coder, huge-context
 hints → long-context, otherwise by complexity (simple → worker, orchestration →
 orchestrator, hard → reasoner). `python main.py route "<task>"` shows the
-decision without running anything. `python main.py fleet` reports which role
-models are actually live on the server (catch a missing pull before a 3am
-routine fails).
+decision without running anything. `python main.py fleet [--probe]` reports
+which role models are actually live on the server (and, with `--probe`, a
+1-token latency per model — useful for deciding which models are interactive vs
+batch-only, like the 405B).
 
 Other models in a typical fleet map to alternates: `mistral-large` (creative /
 multilingual drafts), `gemma4:26b` or `phi4:14b` (cheap graders / cheapest
@@ -178,10 +179,14 @@ Skill and into memory — so the eval suite itself compounds.
 python main.py eval evals/ci-triage-cases.jsonl --skill ci-triage
 ```
 
-### Worktrees — parallel safety
+### Worktrees & parallel experiments
 
-`worktrees.py` wraps `git worktree` so parallel agents (maker vs verifier,
-competing experiments) each get an isolated checkout that can't collide.
+`worktrees.py` wraps `git worktree` so parallel agents each get an isolated
+checkout that can't collide. `experiments.py` builds on it: `run_experiments`
+fans out N approaches (each a delegated sub-agent on a routed model), grades
+each with the independent verifier, and keeps the highest scorer;
+`run_in_worktrees` runs code-producing variants in isolated checkouts and can
+merge the winning branch back. `python main.py experiment "task" --variants 3`.
 
 ### Routines — scheduled / triggered runs (laptop-off)
 
@@ -224,6 +229,8 @@ python main.py             # chat REPL (Novel, loads memory + skills)
 python main.py "task"      # one task, routed + guardrailed
 python main.py goal "..."  # self-correcting goal loop
 python main.py route "..." # show the routing/safety decision
+
+python examples/compounding_demo.py   # live end-to-end demo: watch it compound
 ```
 
 ## Configuration
@@ -259,9 +266,11 @@ trace.py             # append-only JSONL run tracing
 evals.py + evals/    # eval-suite runner that feeds failures back in
 workflows.py         # dynamic workflow primitives (5 patterns)
 worktrees.py         # git-worktree helpers for parallel safety
+experiments.py       # parallel approaches (fan-out + delegate + verify), keep winner
 routines.py          # scheduled/triggered runs (cron + built-in daemon)
 main.py              # CLI (chat, goal, route, fleet, memory, skills, kb, reflect, eval, routine)
 setup.sh             # one-time install + model build
+examples/            # live end-to-end demo (needs a running server)
 tests/               # offline tests (no model/GPU needed)
 ```
 

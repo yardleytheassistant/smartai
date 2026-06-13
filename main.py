@@ -6,7 +6,8 @@ Usage:
     python main.py goal "your goal"        # run a self-correcting maker/verifier loop
         [--rubric "criteria" | --rubric-file PATH] [--max-iterations N]
     python main.py route "your task"       # show the routing/safety decision only
-    python main.py fleet                   # which role models are live on the server
+    python main.py fleet [--probe]         # which role models are live (+ latency)
+    python main.py experiment "task" [--variants N]   # parallel approaches, keep the best
     python main.py memory                  # print the durable state file
     python main.py skills [list|show NAME] # inspect procedural-memory skills
     python main.py kb [search Q|add NAME C]# query/extend the knowledge base
@@ -205,19 +206,52 @@ def cmd_kb(args: list[str]) -> None:
         console.print("[red]usage:[/red] kb [search <query> | add <name> <content>]")
 
 
-def cmd_fleet(_args: list[str]) -> None:
+def cmd_fleet(args: list[str]) -> None:
     import fleet as fleet_mod
 
+    probe = "--probe" in args
     try:
-        statuses = fleet_mod.check()
+        statuses = fleet_mod.check(probe=probe)
     except Exception as exc:  # noqa: BLE001 - server may be down
         console.print(f"[red]could not reach the model server:[/red] {exc}")
         return
     lines = []
     for s in statuses:
         mark = "[green]✓ up[/green]" if s.available else "[red]✗ missing[/red]"
-        lines.append(f"{mark}  [bold]{s.role:<13}[/bold] {s.model}")
+        lat = f"  [dim]{s.latency_s:.2f}s[/dim]" if s.latency_s is not None else ""
+        lines.append(f"{mark}  [bold]{s.role:<13}[/bold] {s.model}{lat}")
     console.print(Panel("\n".join(lines), title="fleet", border_style="cyan", expand=False))
+
+
+def cmd_experiment(args: list[str]) -> None:
+    import experiments as exp_mod
+
+    n = 3
+    task_parts: list[str] = []
+    rubric = None
+    i = 0
+    while i < len(args):
+        if args[i] == "--variants" and i + 1 < len(args):
+            n = int(args[i + 1]); i += 2
+        elif args[i] == "--rubric" and i + 1 < len(args):
+            rubric = args[i + 1]; i += 2
+        else:
+            task_parts.append(args[i]); i += 1
+    task = " ".join(task_parts)
+    if not task:
+        console.print("[red]usage:[/red] experiment \"task\" [--variants N] [--rubric ...]")
+        return
+    console.print(f"[dim]running {n} approaches in parallel…[/dim]")
+    report = exp_mod.run_experiments(task, n, rubric=rubric)
+    ranked = report.ranked()
+    body = "\n".join(
+        f"{'★' if e is report.winner else ' '} score {e.score:.2f} "
+        f"{'met' if e.met else 'unmet':<5} — {e.variant}"
+        for e in ranked
+    )
+    console.print(Panel(body, title="experiments", border_style="green", expand=False))
+    if report.winner:
+        console.print(Panel(report.winner.output, title="winner", border_style="green", expand=False))
 
 
 def cmd_reflect(_args: list[str]) -> None:
@@ -311,6 +345,9 @@ def main() -> None:
         return
     if args[0] == "fleet":
         cmd_fleet(args[1:])
+        return
+    if args[0] == "experiment":
+        cmd_experiment(args[1:])
         return
     run_once(" ".join(args))
 
