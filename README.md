@@ -47,10 +47,18 @@ the heaviest model for everything. Defaults (override any via `.env`):
 Routing (`router.py`) picks by task shape: coding hints → coder, huge-context
 hints → long-context, otherwise by complexity (simple → worker, orchestration →
 orchestrator, hard → reasoner). `python main.py route "<task>"` shows the
-decision without running anything. `python main.py fleet [--probe]` reports
-which role models are actually live on the server (and, with `--probe`, a
-1-token latency per model — useful for deciding which models are interactive vs
-batch-only, like the 405B).
+decision without running anything. Routing is also availability-aware: pass the
+set of loaded models and it won't route to one that isn't up (it downgrades to an
+available model and says so). `python main.py fleet [--probe]` reports which role
+models are live (and, with `--probe`, a 1-token latency per model — useful for
+deciding which models are interactive vs batch-only, like the 405B).
+
+`python main.py status` prints the resolved configuration; `python main.py
+doctor` runs an operational self-check (workspace writable, server reachable,
+critical role models loaded) and exits non-zero if unhealthy; `python main.py
+bench --models a,b,c` benchmarks models over a task set and grades each with the
+verifier, producing a scorecard and a suggested role assignment — so the
+fleet→role mapping is validated empirically, not by reputation.
 
 Other models in a typical fleet map to alternates: `mistral-large` (creative /
 multilingual drafts), `gemma4:26b` or `phi4:14b` (cheap graders / cheapest
@@ -248,7 +256,9 @@ self-improvement layer (`GOAL_MAX_ITERATIONS`, `AGENT_MEMORY_FILE`,
 Modelfile            # the custom 'novel' model on the open-source qwen3.5 base
 build_model.sh       # ollama create novel (with optional base override)
 config.py            # env config + model-fleet routing (orchestrator/worker/grader/…)
-router.py            # task→model routing + configurable safety guardrail
+router.py            # task→model routing (availability-aware) + safety guardrail
+bench.py + bench/    # benchmark models over a task set to validate role assignments
+doctor.py            # operational self-check (server, roles, workspace)
 tools.py             # sandboxed tool registry (memory, knowledge, delegate, …)
 agent.py             # NovelAgent — OpenAI-compatible tool-calling loop
 subagents.py         # sub-agent delegation (role-routed, depth-guarded)
@@ -268,7 +278,8 @@ workflows.py         # dynamic workflow primitives (5 patterns)
 worktrees.py         # git-worktree helpers for parallel safety
 experiments.py       # parallel approaches (fan-out + delegate + verify), keep winner
 routines.py          # scheduled/triggered runs (cron + built-in daemon)
-main.py              # CLI (chat, goal, route, fleet, memory, skills, kb, reflect, eval, routine)
+main.py              # CLI (chat, goal, route, fleet, status, doctor, bench, memory,
+                     #       skills, kb, reflect, eval, experiment, routine)
 setup.sh             # one-time install + model build
 examples/            # live end-to-end demo (needs a running server)
 tests/               # offline tests (no model/GPU needed)

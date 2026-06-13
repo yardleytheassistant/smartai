@@ -18,10 +18,14 @@ sys.path.insert(0, str(ROOT))
 
 @pytest.fixture(autouse=True)
 def _workspace(tmp_path, monkeypatch):
-    """Point the sandbox at a throwaway dir and reload config/tools fresh."""
-    monkeypatch.setenv("AGENT_WORKSPACE", str(tmp_path))
-    for mod in ("tools", "config"):
-        sys.modules.pop(mod, None)
+    """Point the sandbox at a throwaway dir.
+
+    Mutate the live config singleton rather than popping modules from
+    sys.modules — popping creates duplicate Config instances that desync from
+    other modules' references (e.g. fleet) and breaks cross-test isolation.
+    """
+    import config as cfg
+    monkeypatch.setattr(cfg.config, "workspace", str(tmp_path), raising=False)
     yield
 
 
@@ -102,8 +106,7 @@ def test_shell_disabled_by_default():
 
 def test_default_model_is_novel(monkeypatch):
     monkeypatch.delenv("LLM_MODEL", raising=False)
-    sys.modules.pop("config", None)
-    from config import Config
+    from config import Config  # Config() reads env at init; no module reload needed
     assert Config().model == "novel"
 
 
@@ -111,7 +114,6 @@ def test_role_defaults_map_to_fleet(monkeypatch):
     for var in ("LLM_MODEL", "WORKER_MODEL", "GRADER_MODEL", "REASONER_MODEL",
                 "CODER_MODEL", "LONG_CONTEXT_MODEL", "HEAVY_MODEL", "FALLBACK_MODEL"):
         monkeypatch.delenv(var, raising=False)
-    sys.modules.pop("config", None)
     from config import Config
     cfg = Config()
     assert cfg.model == "novel"
@@ -127,7 +129,6 @@ def test_role_defaults_map_to_fleet(monkeypatch):
 
 def test_blank_role_override_falls_back_to_primary(monkeypatch):
     monkeypatch.setenv("WORKER_MODEL", "")
-    sys.modules.pop("config", None)
     from config import Config
     assert Config().worker_model == "novel"
 

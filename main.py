@@ -7,6 +7,9 @@ Usage:
         [--rubric "criteria" | --rubric-file PATH] [--max-iterations N]
     python main.py route "your task"       # show the routing/safety decision only
     python main.py fleet [--probe]         # which role models are live (+ latency)
+    python main.py status                  # print the resolved configuration
+    python main.py doctor                  # operational self-check (exits non-zero if unhealthy)
+    python main.py bench --models a,b,c    # benchmark models to validate role assignments
     python main.py experiment "task" [--variants N]   # parallel approaches, keep the best
     python main.py memory                  # print the durable state file
     python main.py skills [list|show NAME] # inspect procedural-memory skills
@@ -257,6 +260,67 @@ def cmd_experiment(args: list[str]) -> None:
         console.print(Panel(report.winner.output, title="winner", border_style="green", expand=False))
 
 
+def cmd_status(_args: list[str]) -> None:
+    body = (
+        f"endpoint     {config.base_url}\n"
+        f"orchestrator {config.model}\n"
+        f"worker       {config.worker_model}\n"
+        f"grader       {config.grader_model}\n"
+        f"reasoner     {config.reasoner_model}\n"
+        f"coder        {config.coder_model}\n"
+        f"long_context {config.long_context_model}\n"
+        f"heavy        {config.heavy_model}\n"
+        f"vision       {config.vision_model}\n"
+        f"fallback     {config.fallback_model}\n"
+        f"safety       {config.safety_policy}\n"
+        f"max_iter     {config.max_iterations}   ctx_budget {config.context_char_budget}\n"
+        f"workspace    {config.workspace}"
+    )
+    console.print(Panel(body, title="status", border_style="cyan", expand=False))
+
+
+def cmd_doctor(_args: list[str]) -> None:
+    import doctor as doctor_mod
+
+    checks = doctor_mod.run()
+    lines = []
+    for c in checks:
+        mark = "[green]✓[/green]" if c.ok else ("[red]✗[/red]" if c.critical else "[yellow]–[/yellow]")
+        lines.append(f"{mark} {c.name}  [dim]{c.detail}[/dim]")
+    healthy = doctor_mod.ok(checks)
+    border = "green" if healthy else "red"
+    console.print(Panel("\n".join(lines), title="doctor", border_style=border, expand=False))
+    if not healthy:
+        sys.exit(1)
+
+
+def cmd_bench(args: list[str]) -> None:
+    import bench as bench_mod
+
+    models = None
+    tasks_path = None
+    i = 0
+    while i < len(args):
+        if args[i] == "--models" and i + 1 < len(args):
+            models = [m.strip() for m in args[i + 1].split(",")]
+            i += 2
+        elif args[i] == "--tasks" and i + 1 < len(args):
+            tasks_path = args[i + 1]
+            i += 2
+        else:
+            i += 1
+    if not models:
+        console.print("[red]usage:[/red] bench --models a,b,c [--tasks cases.jsonl]")
+        return
+    tasks = bench_mod.load_cases(tasks_path) if tasks_path else bench_mod.load_cases("bench/tasks.jsonl")
+    console.print(f"[dim]benchmarking {len(models)} models over {len(tasks)} tasks…[/dim]")
+    report = bench_mod.run_bench(models, tasks)
+    console.print(Panel(report.scorecard(), title="benchmark", border_style="green", expand=False))
+    roles = report.suggested_roles()
+    if roles:
+        console.print("suggested: " + "  ".join(f"{r}={m}" for r, m in roles.items()))
+
+
 def cmd_reflect(_args: list[str]) -> None:
     import reflect as reflect_mod
 
@@ -351,6 +415,15 @@ def main() -> None:
         return
     if args[0] == "experiment":
         cmd_experiment(args[1:])
+        return
+    if args[0] == "status":
+        cmd_status(args[1:])
+        return
+    if args[0] == "doctor":
+        cmd_doctor(args[1:])
+        return
+    if args[0] == "bench":
+        cmd_bench(args[1:])
         return
     run_once(" ".join(args))
 

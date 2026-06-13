@@ -1,0 +1,4 @@
+{"id": "reasoning-fixedpoint", "input": "Does the function f(x) = cos(x) have a fixed point in [0, 1]? Justify briefly.", "rubric": "Correctly argues yes via the intermediate value theorem / contraction on g(x)=cos(x)-x."}
+{"id": "instruction-following", "input": "List exactly three primary colors, comma-separated, lowercase, no other text.", "rubric": "Output is exactly 'red, green, blue' or 'red, yellow, blue' style: three lowercase colors, comma-separated, nothing else."}
+{"id": "coding-fizzbuzz", "input": "Write a Python function fizzbuzz(n) that returns the FizzBuzz string for an integer n.", "rubric": "Defines fizzbuzz(n); returns 'FizzBuzz' for multiples of 15, 'Fizz' for 3, 'Buzz' for 5, else str(n)."}
+{"id": "extraction", "input": "From 'Order #4412 shipped on 2026-06-10 to Berlin', extract the order number, date, and city as JSON.", "rubric": "Returns JSON with order number 4412, date 2026-06-10, and city Berlin."}

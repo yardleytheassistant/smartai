@@ -103,7 +103,25 @@ def detect_domain(task: str) -> str | None:
     return None
 
 
-def decide(task: str) -> Decision:
+def resolve_available(model: str, available: set[str]) -> str:
+    """If `model` isn't loaded on the server, fall back to an available one.
+
+    Tries the model, then the orchestrator, then any available model; returns the
+    original (unavailable) model only if nothing at all is available.
+    """
+    from fleet import _matches  # local import: fleet imports agent
+
+    if _matches(model, available):
+        return model
+    if _matches(config.model, available):
+        return config.model
+    for m in (config.worker_model, config.reasoner_model, config.grader_model):
+        if _matches(m, available):
+            return m
+    return next(iter(available), model)
+
+
+def decide(task: str, *, available: set[str] | None = None) -> Decision:
     """Route a task and apply the safety policy. Returns a transparent Decision.
 
     Policy is set by SAFETY_POLICY in config:
@@ -115,19 +133,28 @@ def decide(task: str) -> Decision:
     complexity = classify_complexity(task)
     model = route_model(task)
     domain = detect_domain(task)
-    if domain is None:
-        return Decision(task, model, complexity, None, "proceed")
-
     policy = config.safety_policy
-    if policy == "allow":
-        return Decision(task, model, complexity, domain, "proceed",
-                        f"sensitive domain '{domain}' allowed by policy")
-    if policy == "block":
-        return Decision(task, config.fallback_model, complexity, domain, "block",
-                        f"refused: sensitive domain '{domain}'")
-    if policy == "review":
-        return Decision(task, config.fallback_model, complexity, domain, "review",
-                        f"held for human review: sensitive domain '{domain}'")
-    # default: route to the fallback model, transparently
-    return Decision(task, config.fallback_model, complexity, domain, "fallback",
-                    f"routed to fallback model for sensitive domain '{domain}'")
+
+    if domain is None:
+        decision = Decision(task, model, complexity, None, "proceed")
+    elif policy == "allow":
+        decision = Decision(task, model, complexity, domain, "proceed",
+                            f"sensitive domain '{domain}' allowed by policy")
+    elif policy == "block":
+        decision = Decision(task, config.fallback_model, complexity, domain, "block",
+                            f"refused: sensitive domain '{domain}'")
+    elif policy == "review":
+        decision = Decision(task, config.fallback_model, complexity, domain, "review",
+                            f"held for human review: sensitive domain '{domain}'")
+    else:  # default: route to the fallback model, transparently
+        decision = Decision(task, config.fallback_model, complexity, domain, "fallback",
+                            f"routed to fallback model for sensitive domain '{domain}'")
+
+    # Availability-aware: don't route to a model that isn't loaded on the server.
+    if available is not None and decision.action in {"proceed", "fallback"}:
+        resolved = resolve_available(decision.model, available)
+        if resolved != decision.model:
+            note = (decision.note + "; " if decision.note else "")
+            decision.note = f"{note}{decision.model} not loaded → using {resolved}"
+            decision.model = resolved
+    return decision
