@@ -34,7 +34,7 @@ class Config:
     base_url: str = field(default_factory=lambda: os.getenv("LLM_BASE_URL", "http://localhost:11434/v1"))
     # Local servers don't check the key, but the OpenAI client requires a non-empty value.
     api_key: str = field(default_factory=lambda: os.getenv("LLM_API_KEY", "ollama"))
-    model: str = field(default_factory=lambda: os.getenv("LLM_MODEL", "hermes3:70b"))
+    model: str = field(default_factory=lambda: os.getenv("LLM_MODEL", "smartai"))
     temperature: float = field(default_factory=lambda: float(os.getenv("LLM_TEMPERATURE", "0.7")))
     max_tokens: int = field(default_factory=lambda: int(os.getenv("LLM_MAX_TOKENS", "4096")))
 

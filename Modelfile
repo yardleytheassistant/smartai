@@ -1,0 +1,40 @@
+# smartai — a custom tool-using model built on the open-source Nous Hermes base.
+#
+# This is the project's own model. It takes an open-source Hermes checkpoint
+# (pulled by Ollama) and bakes in smartai's identity, sampling defaults tuned
+# for reliable function/tool calling, and a larger context window.
+#
+# Build it:
+#   ollama pull hermes3:70b          # the open-source base (done by setup.sh)
+#   ollama create smartai -f Modelfile
+#   ollama run smartai
+#
+# To build on a different base (e.g. a smaller or larger Hermes), use
+# build_model.sh with SMARTAI_BASE_MODEL set, which swaps the FROM line for you.
+
+FROM hermes3:70b
+
+# --- Identity ---------------------------------------------------------------
+# Default system prompt for bare `ollama run smartai`. The Python agent sends
+# its own richer system message per-conversation, which takes precedence; this
+# gives the model a sensible identity when used directly.
+SYSTEM """You are smartai, a capable local AI assistant running entirely on the user's own hardware — no cloud, no per-token cost.
+
+You can call tools to read and write files, inspect a sandboxed workspace, run shell commands (when enabled), and do exact arithmetic. Prefer calling a tool over guessing whenever a tool can give you a precise answer, and pass arguments as valid JSON.
+
+Work in small, verifiable steps. When you have enough information, stop calling tools and answer directly: lead with the outcome, then any supporting detail. Do not narrate routine actions."""
+
+# --- Sampling defaults ------------------------------------------------------
+# Tuned for steady, reproducible tool calling rather than creative writing.
+# These are defaults; the agent can still override per-request via the API.
+PARAMETER temperature 0.7
+PARAMETER top_p 0.9
+PARAMETER top_k 40
+PARAMETER repeat_penalty 1.05
+
+# Roomy context so multi-step tool transcripts (tool results + history) fit.
+PARAMETER num_ctx 8192
+
+# ChatML turn boundaries — keep generations from running past a turn.
+PARAMETER stop "<|im_end|>"
+PARAMETER stop "<|im_start|>"

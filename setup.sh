@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
-# One-time setup for the Hermes agent on a Mac Studio (Apple Silicon).
-# Installs Ollama, pulls a Hermes model, and creates a Python environment.
+# One-time setup for smartai on a Mac Studio (Apple Silicon).
+# Installs Ollama, pulls the open-source Hermes base, builds the custom
+# 'smartai' model from it, and creates a Python environment.
 set -euo pipefail
 
-MODEL="${LLM_MODEL:-hermes3:70b}"
+cd "$(dirname "$0")"
+
+BASE_MODEL="${SMARTAI_BASE_MODEL:-hermes3:70b}"
+MODEL_NAME="${SMARTAI_MODEL_NAME:-smartai}"
 
 echo "==> Installing Ollama (if missing)"
 if ! command -v ollama >/dev/null 2>&1; then
@@ -20,8 +24,11 @@ echo "==> Starting the Ollama server (background)"
 ollama serve >/dev/null 2>&1 &
 sleep 2
 
-echo "==> Pulling model: ${MODEL}"
-ollama pull "${MODEL}"
+echo "==> Pulling open-source base model: ${BASE_MODEL}"
+ollama pull "${BASE_MODEL}"
+
+echo "==> Building the custom '${MODEL_NAME}' model"
+SMARTAI_MODEL_NAME="${MODEL_NAME}" SMARTAI_BASE_MODEL="${BASE_MODEL}" ./build_model.sh
 
 echo "==> Creating Python virtual environment (.venv)"
 python3 -m venv .venv
@@ -41,5 +48,5 @@ Setup complete.
   python main.py            # start the chat REPL
   python main.py "list the files in the workspace and tell me what's there"
 
-Model in use: ${MODEL}  (edit LLM_MODEL in .env to change it)
+Model in use: ${MODEL_NAME}  (built from ${BASE_MODEL}; edit LLM_MODEL in .env to change it)
 EOF

@@ -1,12 +1,41 @@
-# smartai — Hermes local agent
+# smartai — local agent + custom model
 
-A custom tool-using agent that runs **open-source Nous Hermes models locally**
-on a Mac Studio (Apple Silicon). No cloud APIs, no per-token cost — the model
-runs on your own hardware.
+A tool-using agent that runs a **custom open-source model locally** on a Mac
+Studio (Apple Silicon). No cloud APIs, no per-token cost — everything runs on
+your own hardware.
 
-The agent talks to any **OpenAI-compatible** local server, so the same code
-runs on Ollama, MLX, llama.cpp, or LM Studio. You switch runtimes by changing
-one environment variable.
+The project ships its own model, **`smartai`**, built from an open-source Nous
+Hermes checkpoint via a [`Modelfile`](./Modelfile). Building on Hermes means we
+inherit a model already tuned for reliable function/tool calling, then layer on
+smartai's identity, sampling defaults, and a larger context window — rather than
+training from scratch. The agent then talks to any **OpenAI-compatible** local
+server, so the same code runs on Ollama, MLX, llama.cpp, or LM Studio. You
+switch runtimes by changing one environment variable.
+
+## The `smartai` model
+
+`Modelfile` defines the model declaratively on top of the open-source base:
+
+- **`FROM hermes3:70b`** — the open-source Hermes base, pulled by Ollama.
+- **`SYSTEM`** — bakes in smartai's identity so even bare `ollama run smartai`
+  behaves like the agent.
+- **`PARAMETER`s** — sampling defaults (`temperature`, `top_p`, `top_k`,
+  `repeat_penalty`) tuned for steady, reproducible tool calling, an 8K
+  `num_ctx` so multi-step tool transcripts fit, and ChatML `stop` tokens.
+
+Build it (also done automatically by `setup.sh`):
+
+```bash
+ollama pull hermes3:70b              # the open-source base
+ollama create smartai -f Modelfile  # or: ./build_model.sh
+ollama run smartai                  # try it directly
+```
+
+Build on a different base without editing the Modelfile:
+
+```bash
+SMARTAI_BASE_MODEL=hermes3:8b ./build_model.sh   # smaller/faster
+```
 
 ## Why this stack
 
@@ -29,16 +58,18 @@ one environment variable.
 | Hermes 70B       | fp16      | ~140 GB     | Highest quality at 70B             |
 | Hermes 405B      | 4-bit     | ~200–230 GB | Feasible on 256 GB; slower         |
 
-Default is `hermes3:70b`. Change `LLM_MODEL` in `.env` to go bigger or smaller.
+The `smartai` model is built from `hermes3:70b` by default. Point it at a
+different base with `SMARTAI_BASE_MODEL` when building, or switch the model the
+agent uses with `LLM_MODEL` in `.env`.
 
 ## Quick start (Ollama)
 
 ```bash
 chmod +x setup.sh
-./setup.sh                 # installs Ollama, pulls Hermes, builds .venv
+./setup.sh                 # installs Ollama, pulls Hermes, builds the smartai model + .venv
 
 source .venv/bin/activate
-python main.py             # interactive chat REPL
+python main.py             # interactive chat REPL (uses the smartai model)
 python main.py "create notes.md in the workspace summarizing what you can do"
 ```
 
@@ -107,7 +138,7 @@ All settings are environment variables (see `.env.example`):
 | Variable             | Default                      | Purpose                          |
 | -------------------- | ---------------------------- | -------------------------------- |
 | `LLM_BASE_URL`       | `http://localhost:11434/v1`  | OpenAI-compatible endpoint       |
-| `LLM_MODEL`          | `hermes3:70b`                | Model name/tag                   |
+| `LLM_MODEL`          | `smartai`                    | Model name/tag                   |
 | `LLM_TEMPERATURE`    | `0.7`                        | Sampling temperature             |
 | `LLM_MAX_TOKENS`     | `4096`                       | Max tokens per response          |
 | `AGENT_MAX_STEPS`    | `12`                         | Max tool-calling steps per turn  |
@@ -117,9 +148,22 @@ All settings are environment variables (see `.env.example`):
 ## Project layout
 
 ```
-config.py   # env-driven configuration
-tools.py    # tool definitions + registry (sandboxed)
-agent.py    # the OpenAI-compatible tool-calling loop
-main.py     # CLI / REPL
-setup.sh    # one-time install for Ollama + Python env
+Modelfile        # defines the custom 'smartai' model on the open-source Hermes base
+build_model.sh   # ollama create smartai (with optional base override)
+config.py        # env-driven configuration
+tools.py         # tool definitions + registry (sandboxed)
+agent.py         # the OpenAI-compatible tool-calling loop
+main.py          # CLI / REPL
+setup.sh         # one-time install: Ollama + base pull + model build + Python env
+tests/           # offline tests (no model/GPU needed)
+```
+
+## Tests
+
+The deterministic parts — tool registry, sandbox, safe arithmetic, config, and
+the Modelfile — are covered by offline tests that need no model server:
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest tests/ -q
 ```
