@@ -16,6 +16,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
+import memory
 from config import config
 
 
@@ -201,6 +202,56 @@ def run_shell(command: str) -> str:
     if not out:
         return f"(exit {result.returncode}, no output)"
     return f"(exit {result.returncode})\n{out}"
+
+
+# --- Memory tools (the 5-stage durable store) --------------------------------
+
+@tool(
+    description="Save a verified fact to durable memory (stage 3: something you stopped guessing about and confirmed). Persists across sessions.",
+    parameters={
+        "type": "object",
+        "properties": {"fact": {"type": "string", "description": "The confirmed fact, stated plainly."}},
+        "required": ["fact"],
+    },
+)
+def remember_fact(fact: str) -> str:
+    return memory.load().remember_fact(fact)
+
+
+@tool(
+    description="Save a general rule to durable memory (stage 4: a distilled rule that applies beyond the specific case). Persists across sessions.",
+    parameters={
+        "type": "object",
+        "properties": {"rule": {"type": "string", "description": "The general rule."}},
+        "required": ["rule"],
+    },
+)
+def add_rule(rule: str) -> str:
+    return memory.load().add_rule(rule)
+
+
+@tool(
+    description="Log an open failure to durable memory (stages 1-2: what failed plus a hypothesis to investigate next session).",
+    parameters={
+        "type": "object",
+        "properties": {"failure": {"type": "string", "description": "What failed and your current hypothesis."}},
+        "required": ["failure"],
+    },
+)
+def log_failure(failure: str) -> str:
+    return memory.load().log_failure(failure)
+
+
+@tool(
+    description="Distill a lesson to durable memory (stage 4: a post-mortem takeaway worth keeping).",
+    parameters={
+        "type": "object",
+        "properties": {"lesson": {"type": "string", "description": "The lesson learned."}},
+        "required": ["lesson"],
+    },
+)
+def distill_lesson(lesson: str) -> str:
+    return memory.load().distill_lesson(lesson)
 
 
 # --- Registry interface ------------------------------------------------------

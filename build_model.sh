@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Build the custom `smartai` model from the open-source Hermes base.
+# Build the custom `novel` agent model from the open-source Hermes base.
 #
 # Usage:
-#   ./build_model.sh                         # builds 'smartai' from Modelfile
-#   SMARTAI_MODEL_NAME=smartai-fast \
+#   ./build_model.sh                         # builds 'novel' from Modelfile
+#   SMARTAI_MODEL_NAME=novel-fast \
 #   SMARTAI_BASE_MODEL=hermes3:8b ./build_model.sh   # smaller base, custom name
 #
 # The Modelfile is the canonical definition (FROM hermes3:70b). If
@@ -13,7 +13,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-MODEL_NAME="${SMARTAI_MODEL_NAME:-smartai}"
+MODEL_NAME="${SMARTAI_MODEL_NAME:-novel}"
 BASE_MODEL="${SMARTAI_BASE_MODEL:-}"
 
 if ! command -v ollama >/dev/null 2>&1; then

@@ -7,7 +7,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 BASE_MODEL="${SMARTAI_BASE_MODEL:-hermes3:70b}"
-MODEL_NAME="${SMARTAI_MODEL_NAME:-smartai}"
+MODEL_NAME="${SMARTAI_MODEL_NAME:-novel}"
 
 echo "==> Installing Ollama (if missing)"
 if ! command -v ollama >/dev/null 2>&1; then
@@ -27,7 +27,7 @@ sleep 2
 echo "==> Pulling open-source base model: ${BASE_MODEL}"
 ollama pull "${BASE_MODEL}"
 
-echo "==> Building the custom '${MODEL_NAME}' model"
+echo "==> Building the custom '${MODEL_NAME}' agent model"
 SMARTAI_MODEL_NAME="${MODEL_NAME}" SMARTAI_BASE_MODEL="${BASE_MODEL}" ./build_model.sh
 
 echo "==> Creating Python virtual environment (.venv)"

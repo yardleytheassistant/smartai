@@ -101,19 +101,29 @@ def test_shell_disabled_by_default():
 
 # --- Config -----------------------------------------------------------------
 
-def test_default_model_is_smartai(monkeypatch):
+def test_default_model_is_novel(monkeypatch):
     monkeypatch.delenv("LLM_MODEL", raising=False)
     sys.modules.pop("config", None)
     from config import Config
-    assert Config().model == "smartai"
+    assert Config().model == "novel"
+
+
+def test_roles_fall_back_to_primary_model(monkeypatch):
+    for var in ("LLM_MODEL", "WORKER_MODEL", "GRADER_MODEL"):
+        monkeypatch.delenv(var, raising=False)
+    sys.modules.pop("config", None)
+    from config import Config
+    cfg = Config()
+    assert cfg.worker_model == cfg.model == "novel"
+    assert cfg.grader_model == "novel"
 
 
 # --- Modelfile (the custom model definition) --------------------------------
 
-def test_modelfile_defines_smartai_on_hermes_base():
+def test_modelfile_defines_novel_on_hermes_base():
     text = (ROOT / "Modelfile").read_text()
     assert "FROM hermes3" in text, "must build on the open-source Hermes base"
-    assert "SYSTEM" in text and "smartai" in text
+    assert "SYSTEM" in text and "Novel" in text
     # Sampling + context params that make tool calling reliable.
     for param in ("temperature", "num_ctx", "stop"):
         assert f"PARAMETER {param}" in text

@@ -1,28 +1,30 @@
-# smartai — a custom tool-using model built on the open-source Nous Hermes base.
+# Novel — smartai's custom tool-using agent model, built on an open-source base.
 #
-# This is the project's own model. It takes an open-source Hermes checkpoint
-# (pulled by Ollama) and bakes in smartai's identity, sampling defaults tuned
-# for reliable function/tool calling, and a larger context window.
+# This is the project's own model. It takes an open-source Nous Hermes
+# checkpoint (pulled by Ollama) and bakes in Novel's identity, sampling defaults
+# tuned for reliable function/tool calling, and a larger context window so the
+# self-improving agent loop (maker -> verifier -> memory) has room to work.
 #
 # Build it:
 #   ollama pull hermes3:70b          # the open-source base (done by setup.sh)
-#   ollama create smartai -f Modelfile
-#   ollama run smartai
+#   ollama create novel -f Modelfile
+#   ollama run novel
 #
-# To build on a different base (e.g. a smaller or larger Hermes), use
+# To build on a different open base (e.g. a smaller or larger Hermes), use
 # build_model.sh with SMARTAI_BASE_MODEL set, which swaps the FROM line for you.
 
 FROM hermes3:70b
 
 # --- Identity ---------------------------------------------------------------
-# Default system prompt for bare `ollama run smartai`. The Python agent sends
-# its own richer system message per-conversation, which takes precedence; this
-# gives the model a sensible identity when used directly.
-SYSTEM """You are smartai, a capable local AI assistant running entirely on the user's own hardware — no cloud, no per-token cost.
+# Default system prompt for bare `ollama run novel`. The Python agent sends its
+# own richer system message per-conversation (with durable memory folded in),
+# which takes precedence; this gives the model a sensible identity when used
+# directly.
+SYSTEM """You are Novel, a capable local AI agent running entirely on the user's own hardware on open-source models — no cloud, no per-token cost.
 
-You can call tools to read and write files, inspect a sandboxed workspace, run shell commands (when enabled), and do exact arithmetic. Prefer calling a tool over guessing whenever a tool can give you a precise answer, and pass arguments as valid JSON.
+You can call tools to read and write files, inspect a sandboxed workspace, run shell commands (when enabled), do exact arithmetic, and record what you learn to durable memory. Prefer calling a tool over guessing whenever a tool can give you a precise answer, and pass arguments as valid JSON.
 
-Work in small, verifiable steps. When you have enough information, stop calling tools and answer directly: lead with the outcome, then any supporting detail. Do not narrate routine actions."""
+Work in small, verifiable steps. Save durable facts, general rules, and lessons to memory as you discover them so future sessions resume instead of restarting. When you have enough information, stop calling tools and answer directly: lead with the outcome, then any supporting detail. Do not narrate routine actions."""
 
 # --- Sampling defaults ------------------------------------------------------
 # Tuned for steady, reproducible tool calling rather than creative writing.
@@ -32,7 +34,7 @@ PARAMETER top_p 0.9
 PARAMETER top_k 40
 PARAMETER repeat_penalty 1.05
 
-# Roomy context so multi-step tool transcripts (tool results + history) fit.
+# Roomy context so multi-step tool transcripts (tool results + memory + history) fit.
 PARAMETER num_ctx 8192
 
 # ChatML turn boundaries — keep generations from running past a turn.

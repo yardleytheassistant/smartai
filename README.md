@@ -1,54 +1,119 @@
-# smartai — local agent + custom model
+# smartai — Novel, a self-improving local agent
 
-A tool-using agent that runs a **custom open-source model locally** on a Mac
-Studio (Apple Silicon). No cloud APIs, no per-token cost — everything runs on
-your own hardware.
+**smartai** is a self-improving agent *system* built around **Novel**, a custom
+tool-using model that runs entirely on **open-source models, locally** (Mac
+Studio / Apple Silicon). No cloud APIs, no per-token cost, **no Claude or other
+hosted model** — every model in the system is an open-source checkpoint you run
+on your own hardware.
 
-The project ships its own model, **`smartai`**, built from an open-source Nous
-Hermes checkpoint via a [`Modelfile`](./Modelfile). Building on Hermes means we
-inherit a model already tuned for reliable function/tool calling, then layer on
-smartai's identity, sampling defaults, and a larger context window — rather than
-training from scratch. The agent then talks to any **OpenAI-compatible** local
-server, so the same code runs on Ollama, MLX, llama.cpp, or LM Studio. You
-switch runtimes by changing one environment variable.
+The point isn't to prompt a model and close the tab. It's a system that
+**compounds**: every run leaves the next run smarter. An independent verifier
+grades each attempt, a durable state file accumulates verified facts and
+distilled rules, and a goal loop self-corrects until the work actually meets its
+criteria. The model is stateless; the system around it isn't.
 
-## The `smartai` model
+## Novel — the agent model
 
-`Modelfile` defines the model declaratively on top of the open-source base:
+The project ships its own model, **`novel`**, defined in a [`Modelfile`](./Modelfile)
+on top of an open-source Nous Hermes checkpoint. Building on Hermes inherits a
+base already tuned for reliable function/tool calling; Novel layers on its
+identity, sampling defaults, and a roomy context window — rather than training
+from scratch.
 
-- **`FROM hermes3:70b`** — the open-source Hermes base, pulled by Ollama.
-- **`SYSTEM`** — bakes in smartai's identity so even bare `ollama run smartai`
-  behaves like the agent.
-- **`PARAMETER`s** — sampling defaults (`temperature`, `top_p`, `top_k`,
-  `repeat_penalty`) tuned for steady, reproducible tool calling, an 8K
-  `num_ctx` so multi-step tool transcripts fit, and ChatML `stop` tokens.
-
-Build it (also done automatically by `setup.sh`):
-
-```bash
-ollama pull hermes3:70b              # the open-source base
-ollama create smartai -f Modelfile  # or: ./build_model.sh
-ollama run smartai                  # try it directly
-```
-
-Build on a different base without editing the Modelfile:
+- **`FROM hermes3:70b`** — the open-source base, pulled by Ollama.
+- **`SYSTEM`** — Novel's identity, so even bare `ollama run novel` behaves like
+  the agent.
+- **`PARAMETER`s** — sampling tuned for steady, reproducible tool calling, an 8K
+  `num_ctx` so multi-step tool + memory transcripts fit, and ChatML `stop` tokens.
 
 ```bash
-SMARTAI_BASE_MODEL=hermes3:8b ./build_model.sh   # smaller/faster
+ollama pull hermes3:70b            # the open-source base
+ollama create novel -f Modelfile   # or: ./build_model.sh
+ollama run novel                   # try it directly
+SMARTAI_BASE_MODEL=hermes3:8b ./build_model.sh   # build on a smaller open base
 ```
 
-## Why this stack
+It talks to any **OpenAI-compatible** local server, so the same code runs on
+Ollama, MLX, llama.cpp, or LM Studio by changing one environment variable.
 
-- **Runtime: Ollama (default).** First-class function/tool calling, one-line
-  model pulls, a built-in OpenAI-compatible server. The path of least
-  resistance for a tool-using agent.
-- **Runtime: MLX (performance upgrade).** Apple's native framework — the
-  fastest and most memory-efficient option on M-series silicon. Use it when you
-  want maximum throughput or to run the 405B at low quant.
-- **Model: Nous Hermes.** Hermes models are specifically tuned for reliable
-  structured tool/function calling, which is exactly what an agent loop needs.
-- **Language: Python.** The local-LLM ecosystem (MLX, the Ollama client, the
-  tooling) is Python-native.
+## The compound stack
+
+Four layers, one feedback loop. Every output flows up to the self-improvement
+layer, gets graded and distilled, and is written back to memory — so tomorrow's
+run inherits sharpened state. All of it runs on open-source models.
+
+| Layer | What it is | In this repo |
+| ----- | ---------- | ------------ |
+| **1 · Primitives** | the model, tools, sandbox | `agent.py`, `tools.py` |
+| **2 · Orchestration** | self-correcting loops + dynamic workflows | `loop.py`, `workflows.py` |
+| **3 · Memory** | a durable state file that survives sessions | `memory.py`, `STATE.md` |
+| **4 · Self-improvement** | independent verifier, rule distillation | `verifier.py` |
+
+### Goal loop — self-correcting maker/verifier iteration
+
+A maker agent produces an artifact; an **independent verifier** (a separate
+model instance that sees only the artifact and rubric, never the maker's
+reasoning) grades it; a *not-met* verdict feeds the gap back and starts the next
+iteration. The loop exits when the grader passes or `max_iterations` is hit. A
+verifier sub-agent beats self-critique — a model grading its own work prefers
+conclusions consistent with what it already wrote.
+
+```bash
+python main.py goal "write workspace/fizzbuzz.py and prove it runs" \
+    --rubric "file exists; running it prints 1..15 with Fizz/Buzz/FizzBuzz" \
+    --max-iterations 4
+```
+
+On success the loop distills a lesson and updates the resume pointer; if it gets
+stuck, it logs an open failure — both to durable memory.
+
+### Durable memory — the 5-stage state file
+
+`memory.py` maintains `STATE.md` in the workspace, structured around the
+progression **fail → investigate → verify → distill → consult**:
+
+```
+## Verified facts    (stage 3) — things we stopped guessing about
+## General rules     (stage 4) — distilled rules that apply beyond one case
+## Open failures     (stages 1-2) — failures + hypotheses to investigate next
+## Lessons learned   (stage 4) — distilled post-mortems
+## Last session      (stage 5) — resume, don't restart
+```
+
+Every session reads it at the start (folded into the system prompt) and writes
+to it as it learns. The agent has tools for each stage — `remember_fact`,
+`add_rule`, `log_failure`, `distill_lesson` — and `python main.py memory` prints
+the current state.
+
+### Dynamic workflow primitives
+
+`workflows.py` provides composable, model-agnostic orchestration:
+
+- **`fan_out_synthesize`** — split work into N independent pieces, run each in
+  its own clean context (in parallel), then synthesize.
+- **`adversarial_verify`** — pair a maker with an independent verifier; iterate
+  until it passes.
+- **`loop_until_done`** — keep stepping until a stop condition is met.
+
+### Model routing
+
+Different roles get different open-source models (`config.py`): an
+**orchestrator** for heavy planning, a **worker** for bounded fan-out, an
+independent **grader** for verification. By default all three point at `novel`
+so the system runs out of the box; route any role to a smaller open model (e.g.
+a small Hermes/Qwen grader) via `WORKER_MODEL` / `GRADER_MODEL`.
+
+## Quick start (Ollama)
+
+```bash
+chmod +x setup.sh
+./setup.sh                 # installs Ollama, pulls Hermes, builds the novel model + .venv
+
+source .venv/bin/activate
+python main.py             # interactive chat REPL (uses Novel, loads memory)
+python main.py goal "..."  # run a self-correcting goal loop
+python main.py memory      # print the durable state file
+```
 
 ## Model sizing on 256 GB RAM
 
@@ -58,20 +123,9 @@ SMARTAI_BASE_MODEL=hermes3:8b ./build_model.sh   # smaller/faster
 | Hermes 70B       | fp16      | ~140 GB     | Highest quality at 70B             |
 | Hermes 405B      | 4-bit     | ~200–230 GB | Feasible on 256 GB; slower         |
 
-The `smartai` model is built from `hermes3:70b` by default. Point it at a
-different base with `SMARTAI_BASE_MODEL` when building, or switch the model the
-agent uses with `LLM_MODEL` in `.env`.
-
-## Quick start (Ollama)
-
-```bash
-chmod +x setup.sh
-./setup.sh                 # installs Ollama, pulls Hermes, builds the smartai model + .venv
-
-source .venv/bin/activate
-python main.py             # interactive chat REPL (uses the smartai model)
-python main.py "create notes.md in the workspace summarizing what you can do"
-```
+`novel` is built from `hermes3:70b` by default. Point it at a different base
+with `SMARTAI_BASE_MODEL` when building, or switch the agent's model with
+`LLM_MODEL` in `.env`.
 
 ## Using MLX instead
 
@@ -82,20 +136,13 @@ pip install mlx-lm
 mlx_lm.server --model mlx-community/Hermes-3-Llama-3.1-70B-4bit --port 8080
 ```
 
-Then in `.env`:
-
 ```
 LLM_BASE_URL=http://localhost:8080/v1
 LLM_API_KEY=mlx
 LLM_MODEL=mlx-community/Hermes-3-Llama-3.1-70B-4bit
 ```
 
-Browse `mlx-community` on Hugging Face for other Hermes conversions (including
-Hermes 4 and 405B builds).
-
 ## Built-in tools
-
-The agent ships with a small, safe starter toolset (see `tools.py`):
 
 | Tool             | What it does                                              |
 | ---------------- | -------------------------------------------------------- |
@@ -104,64 +151,60 @@ The agent ships with a small, safe starter toolset (see `tools.py`):
 | `read_file`      | Read a text file in the workspace                        |
 | `write_file`     | Write/overwrite a text file in the workspace            |
 | `calculate`      | Exact arithmetic (safe — no `eval`)                     |
-| `run_shell`      | Run a shell command (disabled by default; see below)    |
+| `run_shell`      | Run a shell command (disabled by default)               |
+| `remember_fact`  | Save a verified fact to durable memory (stage 3)        |
+| `add_rule`       | Save a general rule to durable memory (stage 4)         |
+| `log_failure`    | Log an open failure to durable memory (stages 1-2)      |
+| `distill_lesson` | Distill a lesson to durable memory (stage 4)            |
 
 **Sandboxing:** file and shell tools are confined to `AGENT_WORKSPACE`
-(default `./workspace`). The `run_shell` tool is **off by default** — set
-`AGENT_ENABLE_SHELL=1` in `.env` to enable it, and it refuses obviously
-destructive commands.
-
-### Adding your own tool
-
-Drop a function in `tools.py` and decorate it:
-
-```python
-@tool(
-    description="Fetch the current weather for a city.",
-    parameters={
-        "type": "object",
-        "properties": {"city": {"type": "string"}},
-        "required": ["city"],
-    },
-)
-def get_weather(city: str) -> str:
-    ...
-    return "sunny, 22°C"
-```
-
-It's automatically advertised to the model and dispatched by name.
+(default `./workspace`). `run_shell` is **off by default** — set
+`AGENT_ENABLE_SHELL=1` in `.env` to enable it; it refuses obviously destructive
+commands. Add your own tool by dropping a `@tool`-decorated function in
+`tools.py`; it's automatically advertised to the model and dispatched by name.
 
 ## Configuration
 
 All settings are environment variables (see `.env.example`):
 
-| Variable             | Default                      | Purpose                          |
-| -------------------- | ---------------------------- | -------------------------------- |
-| `LLM_BASE_URL`       | `http://localhost:11434/v1`  | OpenAI-compatible endpoint       |
-| `LLM_MODEL`          | `smartai`                    | Model name/tag                   |
-| `LLM_TEMPERATURE`    | `0.7`                        | Sampling temperature             |
-| `LLM_MAX_TOKENS`     | `4096`                       | Max tokens per response          |
-| `AGENT_MAX_STEPS`    | `12`                         | Max tool-calling steps per turn  |
-| `AGENT_ENABLE_SHELL` | `0`                          | Allow the shell tool             |
-| `AGENT_WORKSPACE`    | `./workspace`                | File/shell sandbox directory     |
+| Variable             | Default                      | Purpose                              |
+| -------------------- | ---------------------------- | ------------------------------------ |
+| `LLM_BASE_URL`       | `http://localhost:11434/v1`  | OpenAI-compatible endpoint           |
+| `LLM_MODEL`          | `novel`                      | Primary / orchestrator model         |
+| `WORKER_MODEL`       | (= `LLM_MODEL`)              | Model for fan-out worker tasks       |
+| `GRADER_MODEL`       | (= `LLM_MODEL`)              | Model for the independent verifier   |
+| `LLM_TEMPERATURE`    | `0.7`                        | Sampling temperature                 |
+| `GRADER_TEMPERATURE` | `0.0`                        | Verifier temperature (reproducible)  |
+| `LLM_MAX_TOKENS`     | `4096`                       | Max tokens per response              |
+| `AGENT_MAX_STEPS`    | `12`                         | Max tool-calling steps per turn      |
+| `GOAL_MAX_ITERATIONS`| `4`                          | Max maker→verifier iterations        |
+| `AGENT_MEMORY_FILE`  | `STATE.md`                   | Durable state file (in workspace)    |
+| `AGENT_ENABLE_SHELL` | `0`                          | Allow the shell tool                 |
+| `AGENT_WORKSPACE`    | `./workspace`                | File/shell sandbox directory         |
 
 ## Project layout
 
 ```
-Modelfile        # defines the custom 'smartai' model on the open-source Hermes base
-build_model.sh   # ollama create smartai (with optional base override)
-config.py        # env-driven configuration
-tools.py         # tool definitions + registry (sandboxed)
-agent.py         # the OpenAI-compatible tool-calling loop
-main.py          # CLI / REPL
+Modelfile        # defines the custom 'novel' model on the open-source Hermes base
+build_model.sh   # ollama create novel (with optional base override)
+config.py        # env-driven config + model routing (orchestrator/worker/grader)
+tools.py         # tool definitions + registry (sandboxed) incl. memory tools
+agent.py         # NovelAgent — the OpenAI-compatible tool-calling loop
+memory.py        # durable 5-stage state file (STATE.md)
+verifier.py      # independent grader sub-agent
+loop.py          # goal loop — maker -> verifier -> memory
+workflows.py     # dynamic workflow primitives (fan-out, adversarial, loop-until)
+main.py          # CLI / REPL (chat, goal, memory)
 setup.sh         # one-time install: Ollama + base pull + model build + Python env
 tests/           # offline tests (no model/GPU needed)
 ```
 
 ## Tests
 
-The deterministic parts — tool registry, sandbox, safe arithmetic, config, and
-the Modelfile — are covered by offline tests that need no model server:
+The whole system — tool registry, sandbox, memory, the verifier, the goal loop,
+and the workflow primitives — is covered by offline tests that need **no model
+server**. A fake OpenAI-compatible client drives the orchestration against
+scripted responses:
 
 ```bash
 pip install -r requirements-dev.txt
