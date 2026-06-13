@@ -158,15 +158,20 @@ def _log_path(name: str) -> Path:
 
 
 def run_routine(routine: Routine, *, client=None, on_event=None) -> LoopResult:
-    """Execute a routine's goal loop, log it, and update durable memory."""
+    """Execute a routine's goal loop, log it, trace it, and update memory."""
+    import trace as trace_mod
+
+    tracer = trace_mod.Tracer(routine.name)
+    tracer.event("routine_start", goal=routine.goal, trigger=routine.trigger)
     result = goal_loop(
         routine.goal,
         rubric=routine.rubric or None,
         max_iterations=routine.max_iterations or None,
         maker_model=routine.model or None,
         client=client,
-        on_event=on_event,
+        on_event=trace_mod.combine(tracer.on_event(), on_event),
     )
+    tracer.event("routine_done", met=result.met, iterations=result.iterations)
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     status = "MET" if result.met else "UNMET"
     with _log_path(routine.name).open("a", encoding="utf-8") as fh:

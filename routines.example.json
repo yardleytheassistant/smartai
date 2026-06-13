@@ -9,6 +9,15 @@
     "enabled": true
   },
   {
+    "name": "nightly-reflection",
+    "goal": "Reflect on the open failures and lessons accumulated in STATE.md. Distill durable general rules and concrete skill failure-modes, and write them back so future runs inherit them.",
+    "trigger": "schedule",
+    "schedule": "30 6 * * *",
+    "rubric": "New general rules and/or skill failure-modes were distilled from accumulated failures and written to memory.",
+    "max_iterations": 2,
+    "enabled": true
+  },
+  {
     "name": "ci-failure-triage",
     "goal": "A CI run just failed. Read the latest logs in workspace/ci-latest.log, classify the failure using the ci-triage skill, draft a fix for tractable cases, and escalate the rest in STATE.md.",
     "trigger": "event",

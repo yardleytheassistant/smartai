@@ -87,6 +87,12 @@ class Config:
     memory_file: str = field(default_factory=lambda: os.getenv("AGENT_MEMORY_FILE", "STATE.md"))
     # Procedural memory: directory of compounding Skills.
     skills_dir: str = field(default_factory=lambda: os.getenv("AGENT_SKILLS_DIR", "skills"))
+    # Knowledge base: directory of versioned reference docs (retrieval layer).
+    knowledge_dir: str = field(default_factory=lambda: os.getenv("AGENT_KNOWLEDGE_DIR", "knowledge"))
+    # Optional embedding model for KB search (blank => deterministic keyword search).
+    embed_model: str = field(default_factory=lambda: os.getenv("EMBED_MODEL", ""))
+    # Max recursion depth for sub-agent delegation (guards runaway spawning).
+    subagent_max_depth: int = field(default_factory=lambda: int(os.getenv("SUBAGENT_MAX_DEPTH", "2")))
     # Routines registry (saved configs) and where routine run logs land.
     routines_file: str = field(default_factory=lambda: os.getenv("AGENT_ROUTINES_FILE", "routines.json"))
 

@@ -8,6 +8,8 @@ Usage:
     python main.py route "your task"       # show the routing/safety decision only
     python main.py memory                  # print the durable state file
     python main.py skills [list|show NAME] # inspect procedural-memory skills
+    python main.py kb [search Q|add NAME C]# query/extend the knowledge base
+    python main.py reflect                 # distill rules from accumulated failures
     python main.py eval CASES.jsonl        # run an eval suite [--skill NAME to compound]
     python main.py routine [list|run NAME|serve|install-cron]   # scheduled/triggered runs
 """
@@ -189,6 +191,32 @@ def cmd_eval(args: list[str]) -> None:
     console.print(Panel(report.summary(), title="eval report", border_style="green", expand=False))
 
 
+def cmd_kb(args: list[str]) -> None:
+    import knowledge as kb
+
+    sub = args[0] if args else "search"
+    if sub == "search" and len(args) > 1:
+        console.print(Panel(kb.search_text(" ".join(args[1:])), title="knowledge", border_style="cyan", expand=False))
+    elif sub == "add" and len(args) > 2:
+        path = kb.add_document(args[1], " ".join(args[2:]))
+        console.print(f"[green]added[/green] {path}")
+    else:
+        console.print("[red]usage:[/red] kb [search <query> | add <name> <content>]")
+
+
+def cmd_reflect(_args: list[str]) -> None:
+    import reflect as reflect_mod
+
+    result = reflect_mod.reflect()
+    body = (
+        f"note: {result['note']}\n"
+        f"rules added: {len(result['rules'])}\n"
+        + "\n".join(f"  • {r}" for r in result["rules"])
+        + (f"\nfailure modes: {len(result['failure_modes'])}" if result["failure_modes"] else "")
+    )
+    console.print(Panel(body, title="reflection", border_style="green", expand=False))
+
+
 def repl() -> None:
     _banner()
     console.print("Type your message. [dim]Ctrl-C or 'exit' to quit.[/dim]\n")
@@ -253,6 +281,12 @@ def main() -> None:
         return
     if args[0] == "eval":
         cmd_eval(args[1:])
+        return
+    if args[0] == "kb":
+        cmd_kb(args[1:])
+        return
+    if args[0] == "reflect":
+        cmd_reflect(args[1:])
         return
     run_once(" ".join(args))
 

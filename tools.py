@@ -254,6 +254,45 @@ def distill_lesson(lesson: str) -> str:
     return memory.load().distill_lesson(lesson)
 
 
+# --- Knowledge base + delegation tools ---------------------------------------
+
+@tool(
+    description="Search the knowledge base (versioned reference docs) and return the most relevant passages with citations. Consult this before re-deriving facts.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "What to look up."},
+            "k": {"type": "integer", "description": "How many passages to return (default 4)."},
+        },
+        "required": ["query"],
+    },
+)
+def search_knowledge(query: str, k: int = 4) -> str:
+    import knowledge
+
+    return knowledge.search_text(query, k=k)
+
+
+@tool(
+    description="Delegate a bounded subtask to a specialist sub-agent that runs on the best-fit model. Use role to pick a tier: worker, coder, reasoner, long_context, grader, heavy. Returns the sub-agent's answer.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "task": {"type": "string", "description": "The subtask for the sub-agent."},
+            "role": {
+                "type": "string",
+                "description": "Optional tier: worker | coder | reasoner | long_context | grader | heavy. Omit to auto-route.",
+            },
+        },
+        "required": ["task"],
+    },
+)
+def delegate(task: str, role: str = "") -> str:
+    import subagents
+
+    return subagents.delegate(task, role=role or None)
+
+
 # --- Registry interface ------------------------------------------------------
 
 def openai_schema() -> list[dict]:

@@ -63,10 +63,10 @@ run inherits sharpened state.
 
 | Layer | What it is | In this repo |
 | ----- | ---------- | ------------ |
-| **1 · Primitives** | the model, tools, sandbox, worktrees | `agent.py`, `tools.py`, `worktrees.py` |
-| **2 · Orchestration** | self-correcting loops, dynamic workflows, routines | `loop.py`, `workflows.py`, `routines.py` |
-| **3 · Memory** | durable state file + compounding skills | `memory.py`, `skills.py` |
-| **4 · Self-improvement** | independent verifier, vision-verify, eval loops | `verifier.py`, `vision.py`, `evals.py` |
+| **1 · Primitives** | the model, tools, sandbox, worktrees, sub-agents | `agent.py`, `tools.py`, `worktrees.py`, `subagents.py` |
+| **2 · Orchestration** | self-correcting loops, dynamic workflows, routines, tracing | `loop.py`, `workflows.py`, `routines.py`, `trace.py` |
+| **3 · Memory** | state file + compounding skills + knowledge base | `memory.py`, `skills.py`, `knowledge.py` |
+| **4 · Self-improvement** | verifier, vision-verify, eval loops, reflection | `verifier.py`, `vision.py`, `evals.py`, `reflect.py` |
 
 ### Goal loop — self-correcting maker/verifier iteration
 
@@ -105,6 +105,34 @@ to it as it learns, via tools `remember_fact` / `add_rule` / `log_failure` /
 ones are folded into the maker's prompt; after a confirmed failure the lesson is
 written **into the Skill** (`## Known failure modes`), so it sharpens every run.
 See [`skills/ci-triage.md`](./skills/ci-triage.md). `python main.py skills list`.
+
+### Knowledge base — the retrieval layer
+
+`knowledge/` holds versioned reference docs. `knowledge.py` chunks and searches
+them (deterministic token-overlap by default; cosine over an open-source
+embedding model when `EMBED_MODEL` is set). The agent queries it with the
+`search_knowledge` tool to cite facts instead of re-deriving them.
+`python main.py kb search "<query>"`.
+
+### Sub-agent delegation
+
+`subagents.py` lets the orchestrator hand a bounded subtask to a fresh agent on
+the best-fit model — by explicit `role` (worker/coder/reasoner/long_context/…),
+explicit model, or automatic routing — with its own clean context. Exposed as
+the `delegate` tool and depth-guarded by `SUBAGENT_MAX_DEPTH`.
+
+### Reflection — meta-distillation
+
+`reflect.py` reads the open failures and lessons accumulated in memory and asks
+the reasoner model to generalize them into durable rules and concrete skill
+failure-modes, written back to memory/skills. Run it on a schedule so specific
+failures become reusable knowledge while you sleep. `python main.py reflect`.
+
+### Tracing
+
+`trace.py` writes an append-only JSONL event stream per run under
+`workspace/traces/`, so loops and routines are auditable after the fact (and
+give reflection something concrete to learn from).
 
 ### Dynamic workflow primitives
 
@@ -192,18 +220,22 @@ Modelfile            # the custom 'novel' model on the open-source qwen3.5 base
 build_model.sh       # ollama create novel (with optional base override)
 config.py            # env config + model-fleet routing (orchestrator/worker/grader/…)
 router.py            # task→model routing + configurable safety guardrail
-tools.py             # sandboxed tool registry, incl. memory tools
+tools.py             # sandboxed tool registry (memory, knowledge, delegate, …)
 agent.py             # NovelAgent — OpenAI-compatible tool-calling loop
+subagents.py         # sub-agent delegation (role-routed, depth-guarded)
 memory.py            # durable 5-stage state file (STATE.md)
 skills.py + skills/  # procedural memory that compounds
+knowledge.py + knowledge/  # retrieval layer over versioned reference docs
 verifier.py          # independent text grader sub-agent
 vision.py            # independent vision (VLM) grader
 loop.py              # goal loop — maker → verifier → memory
+reflect.py           # meta-distillation: failures → durable rules
+trace.py             # append-only JSONL run tracing
 evals.py + evals/    # eval-suite runner that feeds failures back in
 workflows.py         # dynamic workflow primitives (5 patterns)
 worktrees.py         # git-worktree helpers for parallel safety
 routines.py          # scheduled/triggered runs (cron + built-in daemon)
-main.py              # CLI / REPL (chat, goal, route, memory, skills, eval, routine)
+main.py              # CLI (chat, goal, route, memory, skills, kb, reflect, eval, routine)
 setup.sh             # one-time install + model build
 tests/               # offline tests (no model/GPU needed)
 ```
