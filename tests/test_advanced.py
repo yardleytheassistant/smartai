@@ -3,7 +3,6 @@ and reflection. All model calls are driven by the fake client from conftest.
 """
 
 import sys
-from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -51,7 +50,8 @@ def test_knowledge_empty_and_add(tmp_path):
 
 
 def test_knowledge_uses_embeddings_when_configured(tmp_path, monkeypatch):
-    import config as cfg, knowledge
+    import config as cfg
+    import knowledge
     _seed_kb(tmp_path)
     monkeypatch.setattr(cfg.config, "embed_model", "embed-x")
 
@@ -80,7 +80,8 @@ def test_knowledge_uses_embeddings_when_configured(tmp_path, monkeypatch):
 # --- Sub-agent delegation ----------------------------------------------------
 
 def test_delegate_routes_by_role(monkeypatch):
-    import config as cfg, subagents
+    import config as cfg
+    import subagents
     monkeypatch.setattr(cfg.config, "coder_model", "coder-x")
     from tests.conftest import FakeClient
     seen = {}
@@ -94,7 +95,8 @@ def test_delegate_routes_by_role(monkeypatch):
 
 
 def test_delegate_depth_guard(monkeypatch):
-    import config as cfg, subagents
+    import config as cfg
+    import subagents
     monkeypatch.setattr(cfg.config, "subagent_max_depth", 1)
     # Simulate already being one level deep.
     subagents._depth.value = 1
@@ -108,7 +110,9 @@ def test_delegate_depth_guard(monkeypatch):
 # --- Tracing -----------------------------------------------------------------
 
 def test_tracer_writes_and_reads_jsonl(tmp_path, monkeypatch):
-    import config as cfg, trace
+    import trace
+
+    import config as cfg
     monkeypatch.setattr(cfg.config, "workspace", str(tmp_path))
     tracer = trace.Tracer("demo")
     tracer.event("iteration", n=1)
@@ -129,7 +133,9 @@ def test_trace_combine_fans_out():
 # --- Reflection (meta-distillation) -----------------------------------------
 
 def test_reflect_distills_rules_into_memory(tmp_path, monkeypatch):
-    import config as cfg, memory, reflect
+    import config as cfg
+    import memory
+    import reflect
     monkeypatch.setattr(cfg.config, "workspace", str(tmp_path))
     # Isolate skills so reflection can't mutate the repo's versioned skills/.
     monkeypatch.setattr(cfg.config, "skills_dir", str(tmp_path / "skills"))
@@ -148,7 +154,8 @@ def test_reflect_distills_rules_into_memory(tmp_path, monkeypatch):
 
 
 def test_reflect_noop_when_nothing_to_learn(tmp_path, monkeypatch):
-    import config as cfg, reflect
+    import config as cfg
+    import reflect
     monkeypatch.setattr(cfg.config, "workspace", str(tmp_path))
     result = reflect.reflect()  # no client needed; returns early
     assert result["rules"] == [] and "nothing to reflect" in result["note"]

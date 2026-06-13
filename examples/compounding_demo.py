@@ -21,9 +21,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import memory as memory_mod          # noqa: E402
-from loop import goal_loop           # noqa: E402
-from rubric import Rubric            # noqa: E402
+import memory as memory_mod  # noqa: E402
+from loop import goal_loop  # noqa: E402
+from rubric import Rubric  # noqa: E402
 
 TASK = "Write workspace/fizzbuzz.py and confirm what it would print for 1..15."
 RUBRIC = Rubric.from_string(

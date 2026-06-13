@@ -19,7 +19,7 @@ from pathlib import Path
 
 from agent import make_client
 from config import config
-from verifier import Verdict, _extract_json, _VERIFIER_SYSTEM
+from verifier import _VERIFIER_SYSTEM, Verdict, _extract_json
 
 
 def encode_image(path: str | Path) -> str:
@@ -60,7 +60,9 @@ class VisionVerifier:
         )
         raw = response.choices[0].message.content or ""
         try:
-            data = _extract_json(raw)
+            import sanitize
+
+            data = _extract_json(sanitize.strip_reasoning(raw))
             met = bool(data.get("met", False))
             score = float(data.get("score", 1.0 if met else 0.0))
             feedback = str(data.get("feedback", "")).strip()

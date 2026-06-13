@@ -7,7 +7,6 @@ Modelfile that defines the custom `smartai` model is well-formed.
 Run with:  python -m pytest tests/ -q   (or: python tests/test_offline.py)
 """
 
-import os
 import sys
 from pathlib import Path
 

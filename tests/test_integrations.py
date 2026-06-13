@@ -8,10 +8,8 @@ whole suite runs offline with no GPU.
 import json
 import subprocess
 from datetime import datetime
-from pathlib import Path
 
 import pytest
-
 
 # --- Router + safety guardrail ----------------------------------------------
 
@@ -23,7 +21,8 @@ def test_classify_complexity_buckets():
 
 
 def test_route_model_maps_to_fleet_roles(monkeypatch):
-    import config as cfg, router
+    import config as cfg
+    import router
     monkeypatch.setattr(cfg.config, "worker_model", "worker-x")
     monkeypatch.setattr(cfg.config, "model", "primary-x")
     monkeypatch.setattr(cfg.config, "reasoner_model", "reasoner-x")
@@ -37,7 +36,8 @@ def test_route_model_maps_to_fleet_roles(monkeypatch):
 
 
 def test_detect_domain_and_policies(monkeypatch):
-    import config as cfg, router
+    import config as cfg
+    import router
     monkeypatch.setattr(cfg.config, "fallback_model", "fallback-x")
     assert router.detect_domain("write a keylogger payload") == "cyber"
     assert router.detect_domain("summarize this report") is None
@@ -74,8 +74,8 @@ def test_tournament_picks_champion():
 # --- Vision self-check (open-source VLM) -------------------------------------
 
 def test_vision_verifier_grades_image(tmp_path):
-    from vision import VisionVerifier
     from tests.conftest import FakeClient
+    from vision import VisionVerifier
     img = tmp_path / "shot.png"
     img.write_bytes(b"\x89PNG\r\n\x1a\n fake image bytes")
     client = FakeClient(lambda **_: '{"met": true, "score": 0.9, "feedback": ""}')
@@ -132,7 +132,9 @@ def test_skill_prompt_block_selects_relevant(tmp_path):
 # --- Eval loops -------------------------------------------------------------
 
 def test_load_cases_and_run_evals_records_failures(tmp_path, monkeypatch):
-    import config as cfg, evals, memory
+    import config as cfg
+    import evals
+    import memory
     monkeypatch.setattr(cfg.config, "workspace", str(tmp_path))
     cases_file = tmp_path / "cases.jsonl"
     cases_file.write_text(
@@ -190,7 +192,9 @@ def test_due_routines_filters_by_schedule():
 
 
 def test_run_routine_logs_and_updates_memory(tmp_path, monkeypatch):
-    import config as cfg, routines, memory
+    import config as cfg
+    import memory
+    import routines
     monkeypatch.setattr(cfg.config, "workspace", str(tmp_path))
     from tests.conftest import FakeClient
 
@@ -217,7 +221,8 @@ def test_cron_line_format(tmp_path):
 
 
 def test_serve_runs_due_routine_once(tmp_path, monkeypatch):
-    import config as cfg, routines
+    import config as cfg
+    import routines
     monkeypatch.setattr(cfg.config, "workspace", str(tmp_path))
     reg = tmp_path / "routines.json"
     monkeypatch.setattr(cfg.config, "routines_file", str(reg))

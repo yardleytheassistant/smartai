@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import compaction
 import memory as memory_mod
+import sanitize
+import toolcall
 import tools
 from config import config
 
@@ -82,29 +84,48 @@ class NovelAgent:
                 max_tokens=config.max_tokens,
             )
             message = response.choices[0].message
+            content = message.content or ""
 
-            # Record the assistant turn (including any tool calls) before acting.
+            # Prefer native tool calls; otherwise recover ones emitted as text
+            # (Hermes/Qwen/Llama tunes don't always populate the native field).
+            native = list(message.tool_calls or [])
+            if native:
+                calls = [
+                    {"id": tc.id, "name": tc.function.name, "arguments": tc.function.arguments}
+                    for tc in native
+                ]
+            elif self.use_tools:
+                calls = toolcall.parse_text_tool_calls(content, valid_names=set(tools._REGISTRY))
+            else:
+                calls = []
+
             self.messages.append(
                 {
                     "role": "assistant",
-                    "content": message.content or "",
-                    "tool_calls": [tc.model_dump() for tc in message.tool_calls]
-                    if message.tool_calls
-                    else None,
+                    "content": content,
+                    "tool_calls": [tc.model_dump() for tc in native] if native else None,
                 }
             )
 
-            if not message.tool_calls:
-                return message.content or ""
+            if not calls:
+                return sanitize.strip_reasoning(content)
 
-            for call in message.tool_calls:
-                name = call.function.name
-                arguments = call.function.arguments
-                result = tools.dispatch(name, arguments)
+            text_results: list[str] = []
+            for call in calls:
+                result = tools.dispatch(call["name"], call["arguments"])
                 if on_tool is not None:
-                    on_tool(name, arguments, result)
+                    on_tool(call["name"], call["arguments"], result)
+                if native:
+                    self.messages.append(
+                        {"role": "tool", "tool_call_id": call["id"], "content": result}
+                    )
+                else:
+                    text_results.append(f"{call['name']} -> {result}")
+            if text_results:
+                # No native tool_calls to attach a tool role to: feed results back
+                # as a user turn, which every OpenAI-compatible server accepts.
                 self.messages.append(
-                    {"role": "tool", "tool_call_id": call.id, "content": result}
+                    {"role": "user", "content": "Tool results:\n" + "\n".join(text_results)}
                 )
 
         return "Stopped: reached the maximum number of tool-calling steps without a final answer."

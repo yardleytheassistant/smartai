@@ -12,12 +12,11 @@ got sharper" — run it on a schedule (a Routine) to compound while you sleep.
 
 from __future__ import annotations
 
+import memory as memory_mod
+import skills as skills_mod
 from agent import make_client
 from config import config
 from verifier import _extract_json
-
-import memory as memory_mod
-import skills as skills_mod
 
 _REFLECT_SYSTEM = """\
 You are a reflective engineer reviewing an agent's accumulated failures and
@@ -45,7 +44,7 @@ def reflect(*, client=None, model: str | None = None, skill: str | None = None) 
     client = client if client is not None else make_client()
 
     evidence = "## Open failures\n" + "\n".join(f"- {f}" for f in mem.failures)
-    evidence += "\n\n## Lessons\n" + "\n".join(f"- {l}" for l in mem.lessons)
+    evidence += "\n\n## Lessons\n" + "\n".join(f"- {ln}" for ln in mem.lessons)
 
     response = client.chat.completions.create(
         model=model,
@@ -58,7 +57,9 @@ def reflect(*, client=None, model: str | None = None, skill: str | None = None) 
     )
     raw = response.choices[0].message.content or ""
     try:
-        data = _extract_json(raw)
+        import sanitize
+
+        data = _extract_json(sanitize.strip_reasoning(raw))
     except Exception:  # noqa: BLE001 - unparseable reflection is a no-op
         return {"rules": [], "failure_modes": [], "note": f"unparseable reflection: {raw[:200]}"}
 

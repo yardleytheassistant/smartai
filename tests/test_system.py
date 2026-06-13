@@ -69,7 +69,7 @@ def test_memory_roundtrip_and_sections(tmp_path):
     assert reloaded.facts == ["prc is in dollars, not cents"]
     assert reloaded.rules == ["Always include timezone in time-bucketed metrics"]
     assert any("webhook race" in f for f in reloaded.failures)
-    assert any("TLS 1.2" in l for l in reloaded.lessons)
+    assert any("TLS 1.2" in ln for ln in reloaded.lessons)
     assert "3 fixes drafted" in reloaded.last_session
 
 
@@ -150,8 +150,8 @@ def test_goal_loop_stops_when_met():
 
 
 def test_goal_loop_respects_max_iterations_and_logs_failure():
-    from loop import goal_loop
     import memory
+    from loop import goal_loop
     client = FakeClient(_routed_responder('{"met": false, "score": 0.1, "feedback": "nope"}'))
     result = goal_loop(
         "hard goal", maker_model="maker", grader_model="grader",

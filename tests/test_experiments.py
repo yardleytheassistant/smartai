@@ -117,7 +117,8 @@ def test_run_in_worktrees_isolates_and_merges_winner(tmp_path):
 # --- fleet latency probe -----------------------------------------------------
 
 def test_fleet_probe_returns_latency(monkeypatch):
-    import config as cfg, fleet
+    import config as cfg
+    import fleet
     monkeypatch.setattr(cfg.config, "worker_model", "qwen3.6:35b")
     from tests.conftest import FakeClient
 

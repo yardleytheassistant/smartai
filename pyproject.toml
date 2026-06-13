@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "smartai-novel"
+version = "0.1.0"
+description = "Novel — a self-improving local agent system on open-source models"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "openai>=1.40",
+    "python-dotenv>=1.0",
+    "rich>=13.7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.6"]
+
+[project.scripts]
+novel = "main:main"
+
+[tool.setuptools]
+py-modules = [
+    "agent", "compaction", "config", "evals", "experiments", "fleet",
+    "knowledge", "loop", "main", "memory", "reflect", "router", "routines",
+    "rubric", "sanitize", "skills", "subagents", "toolcall", "tools", "trace",
+    "verifier", "vision", "worktrees",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]  # long lines are fine for readable prose in prompts/docstrings
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

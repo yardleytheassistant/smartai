@@ -42,7 +42,8 @@ def test_compact_noop_without_completed_turns():
 
 
 def test_agent_compacts_when_over_budget(monkeypatch):
-    import config as cfg, compaction
+    import compaction
+    import config as cfg
     from agent import NovelAgent
     from tests.conftest import FakeClient
     monkeypatch.setattr(cfg.config, "context_char_budget", 50)
@@ -82,9 +83,9 @@ def test_rubric_from_markdown_and_json(tmp_path):
 
 
 def test_verifier_grades_rubric_per_criterion_weighted():
-    from rubric import Rubric, Criterion
-    from verifier import Verifier
+    from rubric import Criterion, Rubric
     from tests.conftest import FakeClient
+    from verifier import Verifier
     rubric = Rubric(
         criteria=[Criterion("a", "must A", weight=3), Criterion("b", "must B", weight=1)],
         pass_threshold=0.6,
@@ -98,9 +99,9 @@ def test_verifier_grades_rubric_per_criterion_weighted():
 
 
 def test_verifier_rubric_fails_below_threshold():
-    from rubric import Rubric, Criterion
-    from verifier import Verifier
+    from rubric import Criterion, Rubric
     from tests.conftest import FakeClient
+    from verifier import Verifier
     rubric = Rubric(criteria=[Criterion("a", "A"), Criterion("b", "B")], pass_threshold=1.0)
     payload = '{"criteria": [{"id":"a","met":true},{"id":"b","met":false,"feedback":"no B"}]}'
     v = Verifier(client=FakeClient(lambda **_: payload)).grade(goal="g", artifact="x", rubric=rubric)
@@ -108,8 +109,8 @@ def test_verifier_rubric_fails_below_threshold():
 
 
 def test_goal_loop_accepts_rubric_object():
-    from rubric import Rubric, Criterion
     from loop import goal_loop
+    from rubric import Criterion, Rubric
     from tests.conftest import FakeClient
     rubric = Rubric(criteria=[Criterion("a", "must do A")])
 
@@ -126,7 +127,8 @@ def test_goal_loop_accepts_rubric_object():
 # --- Fleet status ------------------------------------------------------------
 
 def test_fleet_check_reports_availability(monkeypatch):
-    import config as cfg, fleet
+    import config as cfg
+    import fleet
     monkeypatch.setattr(cfg.config, "model", "novel")
     monkeypatch.setattr(cfg.config, "worker_model", "qwen3.6:35b")
     available = {"qwen3.6:35b", "deepseek-r1:32b"}

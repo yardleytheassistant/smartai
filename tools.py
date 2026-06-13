@@ -9,7 +9,6 @@ touch paths outside it.
 import ast
 import json
 import operator
-import os
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime

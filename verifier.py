@@ -16,6 +16,7 @@ import json
 import re
 from dataclasses import dataclass
 
+import sanitize
 from agent import make_client
 from config import config
 from rubric import Rubric
@@ -84,7 +85,7 @@ class Verifier:
         )
         raw = response.choices[0].message.content or ""
         try:
-            data = _extract_json(raw)
+            data = _extract_json(sanitize.strip_reasoning(raw))
             met = bool(data.get("met", False))
             score = float(data.get("score", 1.0 if met else 0.0))
             feedback = str(data.get("feedback", "")).strip()
@@ -109,9 +110,8 @@ class Verifier:
             max_tokens=config.max_tokens,
         )
         raw = response.choices[0].message.content or ""
-        weight = {c.id: c.weight for c in rubric.criteria}
         try:
-            data = _extract_json(raw)
+            data = _extract_json(sanitize.strip_reasoning(raw))
             results = {str(r.get("id")): r for r in data.get("criteria", [])}
             earned = 0.0
             gaps: list[str] = []

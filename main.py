@@ -232,11 +232,14 @@ def cmd_experiment(args: list[str]) -> None:
     i = 0
     while i < len(args):
         if args[i] == "--variants" and i + 1 < len(args):
-            n = int(args[i + 1]); i += 2
+            n = int(args[i + 1])
+            i += 2
         elif args[i] == "--rubric" and i + 1 < len(args):
-            rubric = args[i + 1]; i += 2
+            rubric = args[i + 1]
+            i += 2
         else:
-            task_parts.append(args[i]); i += 1
+            task_parts.append(args[i])
+            i += 1
     task = " ".join(task_parts)
     if not task:
         console.print("[red]usage:[/red] experiment \"task\" [--variants N] [--rubric ...]")
