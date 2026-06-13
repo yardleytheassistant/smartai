@@ -24,9 +24,9 @@ def _tmp_workspace(tmp_path, monkeypatch):
 
 
 def test_goal_loop_drives_tool_use_verify_and_memory(_tmp_workspace):
+    import memory
     from loop import goal_loop
     from rubric import Criterion, Rubric
-    import memory
     from tests.conftest import FakeClient
 
     rubric = Rubric(criteria=[Criterion("a", "wrote the file and reported done")])
