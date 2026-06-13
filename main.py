@@ -2,6 +2,7 @@
 
 Usage:
     python main.py                         # start a chat REPL
+    python main.py --resume NAME           # resume a saved REPL session
     python main.py "your task"             # run a single task (routed + guardrailed)
     python main.py goal "your goal"        # run a self-correcting maker/verifier loop
         [--rubric "criteria" | --rubric-file PATH] [--max-iterations N]
@@ -334,10 +335,19 @@ def cmd_reflect(_args: list[str]) -> None:
     console.print(Panel(body, title="reflection", border_style="green", expand=False))
 
 
-def repl() -> None:
+def repl(resume: str | None = None) -> None:
+    import sessions
+
     _banner()
-    console.print("Type your message. [dim]Ctrl-C or 'exit' to quit.[/dim]\n")
-    agent = NovelAgent(load_memory=True)
+    console.print(
+        "Type your message. [dim]Ctrl-C or 'exit' to quit; "
+        "/save NAME and /load NAME to persist sessions.[/dim]\n"
+    )
+    if resume and sessions.exists(resume):
+        agent = NovelAgent(messages=sessions.load(resume))
+        console.print(f"[dim]resumed session '{resume}'[/dim]")
+    else:
+        agent = NovelAgent(load_memory=True)
     while True:
         try:
             user_input = console.input("[bold blue]you ›[/bold blue] ").strip()
@@ -348,6 +358,18 @@ def repl() -> None:
             console.print("[dim]bye[/dim]")
             return
         if not user_input:
+            continue
+        if user_input.startswith("/save "):
+            path = sessions.save(agent.messages, user_input[6:].strip())
+            console.print(f"[dim]saved → {path}[/dim]")
+            continue
+        if user_input.startswith("/load "):
+            name = user_input[6:].strip()
+            try:
+                agent = NovelAgent(messages=sessions.load(name))
+                console.print(f"[dim]loaded session '{name}'[/dim]")
+            except FileNotFoundError as exc:
+                console.print(f"[red]{exc}[/red]")
             continue
         answer = agent.run(user_input, on_tool=_show_tool)
         console.print(Panel(answer, title="novel", border_style="green", expand=False))
@@ -381,6 +403,9 @@ def main() -> None:
     args = sys.argv[1:]
     if not args:
         repl()
+        return
+    if args[0] == "--resume":
+        repl(resume=args[1] if len(args) > 1 else None)
         return
     if args[0] == "goal":
         task, rubric, max_iterations = _parse_goal_args(args[1:])

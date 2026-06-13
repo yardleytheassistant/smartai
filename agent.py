@@ -40,12 +40,18 @@ class NovelAgent:
         skills_query: str | None = None,
         compact: bool = True,
         compact_model: str | None = None,
+        messages: list[dict] | None = None,
     ):
         self.client = client if client is not None else make_client()
         self.model = model or config.model
         self.use_tools = use_tools
         self.compact = compact
         self.compact_model = compact_model or config.worker_model
+
+        if messages is not None:
+            # Resume from a saved transcript (must already include the system turn).
+            self.messages = list(messages)
+            return
 
         prompt = system_prompt or config.system_prompt
         if load_memory:

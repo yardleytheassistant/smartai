@@ -241,6 +241,10 @@ python main.py route "..." # show the routing/safety decision
 python examples/compounding_demo.py   # live end-to-end demo: watch it compound
 ```
 
+In the REPL, `/save NAME` and `/load NAME` persist a session; resume later with
+`python main.py --resume NAME`. (Sessions are verbatim transcripts, distinct
+from the distilled durable memory in STATE.md.)
+
 ## Configuration
 
 All settings are environment variables (see [`.env.example`](./.env.example)):
