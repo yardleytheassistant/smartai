@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Env / secrets
+.env
+
+# Agent workspace (scratch files the agent creates)
+workspace/
+
+# OS
+.DS_Store
