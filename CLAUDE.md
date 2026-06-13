@@ -48,3 +48,6 @@ make demo            # live demo (needs a running server)
   procedural memory (versioned `skills/`) vs reference docs (`knowledge/`).
 - Keep new model-calling code testable: thread `client`/`model` through and add
   an offline test with `FakeClient`. Run `make lint && make test` before pushing.
+- For real-transport coverage (HTTP, native tool calls, `/v1/models`), use the
+  loopback `tests/mock_server.py` — see `tests/test_http_integration.py`. This
+  is how to validate the live path without a model server or external network.

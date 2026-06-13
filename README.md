@@ -300,3 +300,10 @@ call against scripted responses, so nothing needs a server:
 pip install -r requirements-dev.txt
 python -m pytest tests/ -q
 ```
+
+Most tests use a fake client for unit speed, but `tests/test_http_integration.py`
+drives the system through the **real `openai` client** against a loopback
+OpenAI-compatible mock server (`tests/mock_server.py`) — exercising the actual
+transport, `/v1/models`, native tool calls over the wire, the goal loop, fleet
+probe, and doctor. No external network or GPU needed; it's the same code path a
+real Ollama/MLX endpoint hits.
