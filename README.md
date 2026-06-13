@@ -22,11 +22,16 @@ Novel's identity, sampling tuned for reliable function/tool calling, and a large
 context window so the agent loop (tools + memory + skills + history) has room.
 
 ```bash
-ollama pull qwen3.5:122b           # the open-source base (you already have it)
+ollama pull qwen3.5:122b           # the open-source base (~70 GB on disk)
 ollama create novel -f Modelfile   # or: ./build_model.sh
 ollama run novel                   # try it directly
 SMARTAI_BASE_MODEL=qwen3:235b ./build_model.sh   # build a max-capability variant
 ```
+
+The base is large; build on what your disk can hold. Any base with tool-calling
+works — `SMARTAI_BASE_MODEL=qwen3-coder:30b ./build_model.sh` (~18 GB) is a solid
+fit on a constrained disk. A 7B base validates the plumbing but is a weak
+orchestrator for the agent loop, so size up the base once you have headroom.
 
 ## The model fleet → roles
 

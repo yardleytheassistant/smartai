@@ -11,9 +11,14 @@
 # speed, via build_model.sh with SMARTAI_BASE_MODEL set.
 #
 # Build it:
-#   ollama pull qwen3.5:122b         # the open-source base (you already have it)
+#   ollama pull qwen3.5:122b         # the open-source base (~70 GB on disk)
 #   ollama create novel -f Modelfile
 #   ollama run novel
+#
+# Disk note: the base is large. If it doesn't fit, build on a smaller base that
+# still does tool calling, e.g.:
+#   SMARTAI_BASE_MODEL=qwen3-coder:30b ./build_model.sh   # ~18 GB, good tools
+# A 7B base works for validating the plumbing but is a weak orchestrator.
 
 FROM qwen3.5:122b
 
