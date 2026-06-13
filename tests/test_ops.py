@@ -108,5 +108,34 @@ def test_doctor_ok_when_criticals_pass(tmp_path, monkeypatch):
     assert doctor.ok(checks) is True
 
 
+def test_doctor_unreachable_surfaces_endpoint_and_hint(tmp_path, monkeypatch):
+    """When the live server query fails, the check names the endpoint it tried
+    and gives an actionable remediation (the live-test path's #1 failure)."""
+    import config as cfg
+    import doctor
+    import fleet
+    monkeypatch.setattr(cfg.config, "workspace", str(tmp_path))
+    monkeypatch.setattr(cfg.config, "base_url", "http://100.64.0.5:11434/v1")
+
+    def boom(_client=None):
+        raise ConnectionError("connection refused")
+
+    monkeypatch.setattr(fleet, "available_models", boom)
+    checks = doctor.run()  # available=None => live query => hits boom
+    server = next(c for c in checks if c.name == "model server reachable")
+    assert not server.ok and not doctor.ok(checks)
+    # Names the endpoint and, since it's remote, hints at binding/reachability.
+    assert "http://100.64.0.5:11434/v1" in server.detail
+    assert "OLLAMA_HOST=0.0.0.0" in server.detail
+
+
+def test_doctor_unreachable_hint_local_vs_remote():
+    import doctor
+    local = doctor._unreachable_hint("http://localhost:11434/v1")
+    remote = doctor._unreachable_hint("http://100.64.0.5:11434/v1")
+    assert "ollama serve" in local and "remote" in local.lower()
+    assert "OLLAMA_HOST=0.0.0.0" in remote and "curl" in remote
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))

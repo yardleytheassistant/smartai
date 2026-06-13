@@ -34,6 +34,19 @@ def _workspace_check() -> Check:
         return Check("workspace writable", False, str(exc))
 
 
+def _unreachable_hint(endpoint: str) -> str:
+    """Actionable next step when the model server can't be reached."""
+    host = endpoint.split("//", 1)[-1].split("/", 1)[0]
+    is_local = any(h in host for h in ("localhost", "127.0.0.1", "0.0.0.0"))
+    if is_local:
+        return "start a server (e.g. `ollama serve`) or set LLM_BASE_URL to a remote endpoint"
+    # Remote endpoint (LAN / Tailscale): the usual culprit is Ollama bound to
+    # loopback on the host, or a wrong address.
+    return ("check the address and that the remote host serves it on all interfaces "
+            "(`OLLAMA_HOST=0.0.0.0 ollama serve`); verify reachability "
+            f"with `curl {endpoint}/models`")
+
+
 def run(available: "set[str] | None" = None, client=None) -> list[Check]:
     """Run all checks. If `available` is given, skip the live server query."""
     checks: list[Check] = [_workspace_check()]
@@ -48,12 +61,15 @@ def run(available: "set[str] | None" = None, client=None) -> list[Check]:
 
     # Model server + per-role availability.
     if available is None:
+        endpoint = config.base_url
         try:
             import fleet
             available = fleet.available_models(client)
-            checks.append(Check("model server reachable", True, f"{len(available)} models"))
+            checks.append(Check("model server reachable", True,
+                                f"{endpoint} — {len(available)} models"))
         except Exception as exc:  # noqa: BLE001
-            checks.append(Check("model server reachable", False, str(exc)))
+            checks.append(Check("model server reachable", False,
+                                f"{endpoint}: {exc} — {_unreachable_hint(endpoint)}"))
             return checks
 
     import fleet

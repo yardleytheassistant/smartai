@@ -254,6 +254,13 @@ endpoint (`LLM_BASE_URL`/`LLM_API_KEY`), the role models above, generation
 self-improvement layer (`GOAL_MAX_ITERATIONS`, `AGENT_MEMORY_FILE`,
 `AGENT_SKILLS_DIR`, `AGENT_ROUTINES_FILE`), and `SAFETY_POLICY`.
 
+The models don't have to run on the same machine as this checkout. Point
+`LLM_BASE_URL` at any reachable OpenAI-compatible endpoint — e.g. a Mac Studio
+serving Ollama over LAN or Tailscale (`LLM_BASE_URL=http://100.x.y.z:11434/v1`).
+Bind the host's server to all interfaces first (`OLLAMA_HOST=0.0.0.0 ollama
+serve`), then `python main.py doctor` confirms reachability and which role
+models are loaded (and names the endpoint + a fix if it can't connect).
+
 ## Project layout
 
 ```
