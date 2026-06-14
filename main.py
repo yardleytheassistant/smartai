@@ -266,6 +266,11 @@ def cmd_experiment(args: list[str]) -> None:
     console.print(Panel(body, title="experiments", border_style="green", expand=False))
     if report.winner:
         console.print(Panel(report.winner.output, title="winner", border_style="green", expand=False))
+        console.print(
+            "[dim]experiment = grounded design exploration: a winning direction that fits "
+            "the code. Depth tracks the maker model; land it via the goal loop or "
+            "run_in_worktrees.[/dim]"
+        )
 
 
 def cmd_status(_args: list[str]) -> None:

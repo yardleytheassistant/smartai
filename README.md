@@ -212,9 +212,13 @@ merge the winning branch back. `python main.py experiment "task" --variants 3`.
 For "implement X **in this repo**" tasks, pass `--context-file PATH` (repeatable):
 the named source is folded into **both** the makers and the grader, so approaches
 fit the existing modules/APIs/conventions instead of inventing them, and the
-verifier can penalize code that references things that don't exist — turning the
-experiment from a sketch generator into one that produces landable diffs.
+verifier can penalize code that references things that don't exist.
 `python main.py experiment "add a --runs flag to bench" --context-file bench.py --context-file main.py`.
+Think of `run_experiments` as **grounded design exploration** — it returns a
+winning *direction that fits the real code*, and how deep (a plan vs. drop-in
+code) tracks the maker model's strength. For variants that actually write and
+commit code in isolation, use `run_in_worktrees`; to turn a winning direction
+into a landed diff, hand it to the orchestrator/goal loop.
 
 ### Routines — scheduled / triggered runs (laptop-off)
 

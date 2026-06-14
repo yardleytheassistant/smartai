@@ -27,7 +27,9 @@ from workflows import fan_out_synthesize
 _MAKER_CONTEXT_HEADER = (
     "EXISTING SOURCE you must fit — match its modules, APIs, naming, and "
     "conventions. Do NOT invent files, functions, classes, imports, CLI flags, or "
-    "frameworks that don't appear below:"
+    "frameworks that don't appear below. The source is already provided here, so do "
+    "NOT plan to read files or describe what you would do — output the ACTUAL code "
+    "(concrete edits or full functions that drop into these files):"
 )
 
 
