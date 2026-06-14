@@ -12,11 +12,13 @@ several hypotheses at once, collects graded results, and merges the best one.
 
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
+from config import config
 from verifier import Verdict, Verifier
 from workflows import fan_out_synthesize
 
@@ -133,6 +135,47 @@ def run_experiments(
     )
 
 
+@dataclass
+class LandResult:
+    """Outcome of landing a winning direction. `met` is the verifier's verdict;
+    `files_written` is what actually changed on disk. A verifier 'met' with no
+    files written is NOT a landed change — it means the maker described the work
+    instead of doing it. `landed` requires both, so success isn't a claim on faith.
+    """
+
+    met: bool
+    iterations: int
+    output: str
+    files_written: list[str] = field(default_factory=list)
+    verdict: Verdict | None = None
+
+    @property
+    def landed(self) -> bool:
+        return self.met and bool(self.files_written)
+
+
+def _artifact_files(root) -> dict[str, str]:
+    """Map artifact files in the workspace to a content hash, ignoring the system's
+    own bookkeeping (durable memory, traces, sessions) so only real code shows up."""
+    base = Path(root)
+    if not base.is_dir():
+        return {}
+    ignore_names = {Path(config.memory_file).name, ".doctor-write-test"}
+    ignore_dirs = {"traces", "sessions"}
+    out: dict[str, str] = {}
+    for p in base.rglob("*"):
+        if not p.is_file():
+            continue
+        rel = p.relative_to(base)
+        if (rel.parts and rel.parts[0] in ignore_dirs) or p.name in ignore_names:
+            continue
+        try:
+            out[str(rel)] = hashlib.sha256(p.read_bytes()).hexdigest()
+        except OSError:
+            continue
+    return out
+
+
 def land_winner(
     task: str,
     winner: Experiment,
@@ -143,21 +186,25 @@ def land_winner(
     max_iterations: int | None = None,
     use_memory: bool = True,
     on_event=None,
-):
-    """Hand the winning direction to a goal loop that writes and verifies code.
+) -> LandResult:
+    """Hand the winning direction to a goal loop and verify it actually wrote code.
 
     Experiments explore *directions*; this is the opt-in second leg that turns the
-    chosen direction into an actual, verifier-checked artifact — the full
-    "design exploration -> landed code" pipeline. Returns the goal loop's
-    LoopResult. The same `context` grounds the maker and grader here too.
+    chosen direction into a verifier-checked artifact in the workspace. It snapshots
+    the workspace before and after, so `LandResult.landed` reflects real disk writes,
+    not just the verifier's verdict (a maker can describe a change without doing it).
+    Note: this writes to the workspace sandbox, not the repo — for edits to existing
+    repo files, use `run_in_worktrees`. The same `context` grounds maker and grader.
     """
     from loop import goal_loop
 
     land_task = (
         f"{task}\n\nUse this approach, chosen by a parallel experiment as the best "
-        f"direction:\n{winner.output}"
+        f"direction:\n{winner.output}\n\nActually write the file(s) with the "
+        f"write_file tool — do not just describe the change."
     )
-    return goal_loop(
+    before = _artifact_files(config.workspace)
+    result = goal_loop(
         land_task,
         rubric=rubric,
         context=context,
@@ -165,6 +212,15 @@ def land_winner(
         max_iterations=max_iterations,
         use_memory=use_memory,
         on_event=on_event,
+    )
+    after = _artifact_files(config.workspace)
+    files_written = sorted(p for p in after if after[p] != before.get(p))
+    return LandResult(
+        met=result.met,
+        iterations=result.iterations,
+        output=result.output,
+        files_written=files_written,
+        verdict=result.verdict,
     )
 
 

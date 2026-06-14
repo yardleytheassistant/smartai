@@ -216,12 +216,15 @@ verifier can penalize code that references things that don't exist.
 `python main.py experiment "add a --runs flag to bench" --context-file bench.py --context-file main.py`.
 Think of `run_experiments` as **grounded design exploration** — it returns a
 winning *direction that fits the real code*, and how deep (a plan vs. drop-in
-code) tracks the maker model's strength. To go from direction to verified code,
-add `--land`: the winning direction is fed into a source-grounded goal loop
-(`land_winner`) that writes and verifies the code — the full *explore → land*
-pipeline in one command. For variants that write and commit code in isolated
-checkouts, use `run_in_worktrees`.
-`python main.py experiment "add a --runs flag to bench" --context-file bench.py --land`.
+code) tracks the maker model's strength. To go from direction to a verified
+artifact, add `--land` (only if the winner met the rubric): the direction is fed
+into a source-grounded goal loop that writes a file **to the workspace** and is
+graded. `land_winner` snapshots the workspace before/after, so it reports
+`landed ✓` **only when files actually changed on disk** — a verifier that passes
+on described-but-unwritten work is flagged, not counted as success. This writes
+to the workspace sandbox, so it suits *new-code* tasks; to **edit existing repo
+files**, use `run_in_worktrees` (each variant gets a real checkout to edit and
+commit). `python main.py experiment "write a JSON-scorecard helper" --context-file bench.py --land`.
 
 ### Routines — scheduled / triggered runs (laptop-off)
 

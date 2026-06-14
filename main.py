@@ -278,6 +278,12 @@ def cmd_experiment(args: list[str]) -> None:
             )
 
     if land and report.winner:
+        if not report.winner.met:
+            console.print(
+                "[red]winner did not meet the rubric[/red] — refusing to land a bad seed. "
+                "Tighten the approach/rubric, or use run_in_worktrees."
+            )
+            return
         console.print("[dim]landing the winning direction via a goal loop…[/dim]")
 
         def on_event(kind: str, data: dict) -> None:
@@ -290,10 +296,19 @@ def cmd_experiment(args: list[str]) -> None:
         result = exp_mod.land_winner(
             task, report.winner, rubric=rubric, context=context, on_event=on_event
         )
-        title = "landed ✓" if result.met else "land attempt ✗"
-        style = "green" if result.met else "yellow"
+        # 'landed' requires real files on disk, not just the verifier's verdict.
+        if result.landed:
+            title, style = "landed ✓", "green"
+            footer = "wrote: " + ", ".join(result.files_written)
+        elif result.met:
+            title, style = "verifier approved but NO files written ⚠ — not landed", "yellow"
+            footer = "the maker described the change instead of writing it (workspace unchanged)"
+        else:
+            title, style = "land attempt ✗", "red"
+            footer = "verifier did not pass"
         console.print(
-            Panel(result.output, title=f"{title}  ({result.iterations} iter)", border_style=style, expand=False)
+            Panel(f"{result.output}\n\n[dim]{footer}[/dim]",
+                  title=f"{title}  ({result.iterations} iter)", border_style=style, expand=False)
         )
 
 

@@ -134,12 +134,13 @@ def test_delegate_passes_use_tools_through(monkeypatch):
     assert captured["use_tools"] is False
 
 
-def test_land_winner_feeds_direction_into_grounded_goal_loop(monkeypatch):
-    """--land path: the winning direction + context are handed to a goal loop
-    that actually writes/verifies code."""
+def test_land_winner_feeds_direction_into_grounded_goal_loop(monkeypatch, tmp_path):
+    """--land path: the winning direction + context are handed to a goal loop."""
+    import config as cfg
     import experiments
     from experiments import Experiment
 
+    monkeypatch.setattr(cfg.config, "workspace", str(tmp_path))
     captured = {}
 
     class FakeResult:
@@ -164,6 +165,52 @@ def test_land_winner_feeds_direction_into_grounded_goal_loop(monkeypatch):
     assert "add a --json flag" in captured["task"]          # original task
     assert captured["context"] == "SRC-MARKER"              # grounding threaded through
     assert captured["rubric"] == "r"
+
+
+def test_land_winner_landed_requires_real_file_write(tmp_workspace):
+    """A maker that actually writes a file -> landed. The verifier passing alone
+    is not enough; landed is anchored to disk state."""
+    import experiments
+    from experiments import Experiment
+    from tests.conftest import FakeClient
+
+    def responder(model, messages, **_):
+        sysmsg = (messages[0].get("content") or "").lower()
+        if "verifier" in sysmsg:
+            return '{"met": true, "score": 1.0, "feedback": ""}'
+        if any("Tool results" in (m.get("content") or "") for m in messages):
+            return "Done — wrote out.txt."
+        return '<tool_call>{"name": "write_file", "arguments": {"path": "out.txt", "content": "x"}}</tool_call>'
+
+    winner = Experiment("approach 1", "create out.txt", 0.9, met=True)
+    result = experiments.land_winner(
+        "create a file", winner, client=FakeClient(responder), use_memory=False
+    )
+    assert result.met and result.files_written == ["out.txt"]
+    assert result.landed is True
+    assert (tmp_workspace / "out.txt").exists()
+
+
+def test_land_winner_not_landed_when_maker_only_describes(tmp_workspace):
+    """The demonstrated bug: maker describes the change (no write_file), verifier
+    passes anyway -> met but NOT landed, because nothing hit disk."""
+    import experiments
+    from experiments import Experiment
+    from tests.conftest import FakeClient
+
+    def responder(model, messages, **_):
+        sysmsg = (messages[0].get("content") or "").lower()
+        if "verifier" in sysmsg:
+            return '{"met": true, "score": 1.0, "feedback": ""}'
+        return "Let me create the updated main.py file with the --quiet flag implementation:"
+
+    winner = Experiment("approach 1", "add --quiet to doctor", 0.8, met=True)
+    result = experiments.land_winner(
+        "add --quiet", winner, client=FakeClient(responder), use_memory=False
+    )
+    assert result.met is True          # the verifier was fooled by intent text
+    assert result.files_written == []  # but nothing was written
+    assert result.landed is False      # so it is NOT landed — no false success
 
 
 def test_build_context_reads_and_labels_files(tmp_path):
