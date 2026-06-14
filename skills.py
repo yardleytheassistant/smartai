@@ -10,6 +10,7 @@ A Skill is a Markdown file with a tiny frontmatter block:
     ---
     name: ci-triage
     description: Classify CI failures, draft fixes for easy ones, escalate the rest.
+    when: a CI/build run fails, or during morning triage of red pipelines
     trigger: workflow_run.failure, morning triage
     ---
     # CI triage skill
@@ -17,7 +18,10 @@ A Skill is a Markdown file with a tiny frontmatter block:
     ## Known failure modes      <- appended to as the loop learns
     - webhook-race: ...
 
-No YAML dependency: the frontmatter is simple `key: value` lines.
+`description` says what the skill does; `when` says the situation it applies to
+(surfaced to the model as "Apply when:" so it can decide whether to use it);
+`trigger` is keyword fuel for retrieval. No YAML dependency: the frontmatter is
+simple `key: value` lines.
 """
 
 from __future__ import annotations
@@ -36,13 +40,16 @@ class Skill:
     description: str
     trigger: str
     body: str
+    when: str = ""
     path: Path | None = None
     meta: dict = field(default_factory=dict)
 
     def matches(self, query: str) -> bool:
         """True if the query plausibly invokes this skill (keyword overlap)."""
         q = query.lower()
-        hay = f"{self.name} {self.description} {self.trigger}".lower()
+        # `when` (applicability) is part of the haystack so situational wording
+        # ("the build failed") retrieves the skill even if the name doesn't appear.
+        hay = f"{self.name} {self.description} {self.trigger} {self.when}".lower()
         words = {w for w in _tokenize(hay) if len(w) > 3}
         return any(w in q for w in words) or self.name.lower() in q
 
@@ -75,6 +82,8 @@ class Skill:
             f"name: {self.name}",
             f"description: {self.description}",
         ]
+        if self.when:
+            fm.append(f"when: {self.when}")
         if self.trigger:
             fm.append(f"trigger: {self.trigger}")
         fm.append("---")
@@ -113,6 +122,7 @@ def parse(text: str, *, path: Path | None = None) -> Skill:
         description=meta.get("description", ""),
         trigger=meta.get("trigger", ""),
         body=body.lstrip("\n"),
+        when=meta.get("when", ""),
         path=path,
         meta=meta,
     )
@@ -149,9 +159,27 @@ def get(name: str, directory: str | Path | None = None) -> Skill | None:
 
 
 def prompt_block(query: str, *, max_skills: int = 3, directory: str | Path | None = None) -> str:
-    """Render the most relevant skills for injection into a system prompt."""
+    """Render the most relevant skills for injection into a system prompt.
+
+    Each skill leads with its `Apply when:` condition (if set), and the block
+    opens with an instruction telling the model these were keyword-retrieved and
+    to apply each only when its condition fits the task — so the model decides
+    relevance, not just the retrieval heuristic.
+    """
     relevant = match(query, directory)[:max_skills]
     if not relevant:
         return ""
-    chunks = [f"### Skill: {s.name}\n{s.description}\n\n{s.body.strip()}" for s in relevant]
-    return "## Relevant skills (procedural memory)\n" + "\n\n".join(chunks) + "\n"
+    chunks = []
+    for s in relevant:
+        head = f"### Skill: {s.name}"
+        if s.when:
+            head += f"\n**Apply when:** {s.when}"
+        if s.description:
+            head += f"\n{s.description}"
+        chunks.append(f"{head}\n\n{s.body.strip()}")
+    intro = (
+        "## Relevant skills (procedural memory)\n"
+        "These were retrieved by keyword and may not all apply. Use a skill only "
+        "when its **Apply when** condition fits the task; otherwise ignore it.\n\n"
+    )
+    return intro + "\n\n".join(chunks) + "\n"

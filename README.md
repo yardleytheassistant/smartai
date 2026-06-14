@@ -142,6 +142,12 @@ ones are folded into the maker's prompt; after a confirmed failure the lesson is
 written **into the Skill** (`## Known failure modes`), so it sharpens every run.
 See [`skills/ci-triage.md`](./skills/ci-triage.md). `python main.py skills list`.
 
+Each skill's frontmatter carries a **`when:`** line — the situation it applies to
+— which is both extra retrieval signal and surfaced to the model as `Apply when:`,
+so the agent uses a skill *when it fits the task* rather than whenever a keyword
+happens to overlap. The injected block also tells the model to ignore retrieved
+skills whose `when` doesn't match, so a blunt keyword hit doesn't misfire.
+
 ### Knowledge base — the retrieval layer
 
 `knowledge/` holds versioned reference docs. `knowledge.py` chunks and searches

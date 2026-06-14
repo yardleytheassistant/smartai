@@ -129,6 +129,36 @@ def test_skill_prompt_block_selects_relevant(tmp_path):
     assert skills.prompt_block("totally unrelated", directory=tmp_path) == ""
 
 
+def test_skill_when_field_round_trips_and_aids_matching(tmp_path):
+    import skills
+    path = tmp_path / "deploy.md"
+    text = (
+        "---\nname: deploy-rollback\ndescription: roll back a bad deploy\n"
+        "when: a production deploy is failing or error rates spiked after a release\n"
+        "trigger: rollback\n---\n# body\nsteps\n"
+    )
+    s = skills.parse(text, path=path)
+    assert s.when.startswith("a production deploy is failing")
+    # Situational wording (no skill name, no trigger word) still matches via `when`.
+    assert s.matches("error rates spiked, customers seeing failures")
+    # `when` survives a save/reload round-trip through the frontmatter.
+    s.save()
+    assert "when: a production deploy is failing" in path.read_text()
+    assert skills.parse(path.read_text(), path=path).when == s.when
+
+
+def test_prompt_block_surfaces_apply_when_and_decision_guidance(tmp_path):
+    import skills
+    (tmp_path / "deploy.md").write_text(
+        "---\nname: deploy-rollback\ndescription: roll back a bad deploy\n"
+        "when: a production deploy is failing\ntrigger: rollback\n---\n# body\n"
+    )
+    block = skills.prompt_block("the deploy is failing in prod", directory=tmp_path)
+    assert "Apply when:" in block and "a production deploy is failing" in block
+    # The block tells the model to apply a skill only when its condition fits.
+    assert "only" in block.lower() and "apply when" in block.lower()
+
+
 # --- Eval loops -------------------------------------------------------------
 
 def test_load_cases_and_run_evals_records_failures(tmp_path, monkeypatch):

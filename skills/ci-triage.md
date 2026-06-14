@@ -1,6 +1,7 @@
 ---
 name: ci-triage
 description: Classify CI failures, draft fixes for easy ones, escalate the rest.
+when: a CI/build/workflow run is failing, or you're triaging a red pipeline — NOT for ordinary code changes that haven't broken CI.
 trigger: ci failure, workflow_run.failure, morning triage, build broke
 ---
 # CI triage skill
