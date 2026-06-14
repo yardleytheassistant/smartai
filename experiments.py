@@ -183,6 +183,7 @@ def land_winner(
     rubric=None,
     context: str = "",
     client=None,
+    maker_model: str | None = None,
     max_iterations: int | None = None,
     use_memory: bool = True,
     on_event=None,
@@ -193,8 +194,10 @@ def land_winner(
     chosen direction into a verifier-checked artifact in the workspace. It snapshots
     the workspace before and after, so `LandResult.landed` reflects real disk writes,
     not just the verifier's verdict (a maker can describe a change without doing it).
-    Note: this writes to the workspace sandbox, not the repo — for edits to existing
-    repo files, use `run_in_worktrees`. The same `context` grounds maker and grader.
+    The maker defaults to the coder model — writing code with tools is the coder
+    role, and small orchestrator builds are poor at tool-calling. Note: this writes
+    to the workspace sandbox, not the repo — for edits to existing repo files, use
+    `run_in_worktrees`. The same `context` grounds maker and grader.
     """
     from loop import goal_loop
 
@@ -209,6 +212,7 @@ def land_winner(
         rubric=rubric,
         context=context,
         require_file_write=True,
+        maker_model=maker_model or config.coder_model,
         client=client,
         max_iterations=max_iterations,
         use_memory=use_memory,
@@ -257,6 +261,7 @@ def land_in_worktree(
     rubric=None,
     context: str = "",
     client=None,
+    maker_model: str | None = None,
     base: str = "HEAD",
     root=None,
     merge: bool = False,
@@ -289,6 +294,7 @@ def land_in_worktree(
         config.workspace = str(wt.path)
         result = goal_loop(
             land_task, rubric=rubric, context=context, require_file_write=True,
+            maker_model=maker_model or config.coder_model,
             client=client, max_iterations=max_iterations, use_memory=False, on_event=on_event,
         )
     finally:

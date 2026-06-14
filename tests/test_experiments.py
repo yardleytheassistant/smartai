@@ -153,6 +153,8 @@ def test_land_winner_feeds_direction_into_grounded_goal_loop(monkeypatch, tmp_pa
         captured["task"] = task
         captured["context"] = kw.get("context", "")
         captured["rubric"] = kw.get("rubric")
+        captured["maker_model"] = kw.get("maker_model")
+        captured["require_file_write"] = kw.get("require_file_write")
         return FakeResult()
 
     import loop
@@ -165,6 +167,13 @@ def test_land_winner_feeds_direction_into_grounded_goal_loop(monkeypatch, tmp_pa
     assert "add a --json flag" in captured["task"]          # original task
     assert captured["context"] == "SRC-MARKER"              # grounding threaded through
     assert captured["rubric"] == "r"
+    assert captured["require_file_write"] is True            # land must actually write
+    # Land maker defaults to the coder role (small orchestrators are weak at tools).
+    assert captured["maker_model"] == cfg.config.coder_model
+
+    # An explicit --maker override is honored.
+    experiments.land_winner("t", winner, maker_model="deepseek-r1:70b")
+    assert captured["maker_model"] == "deepseek-r1:70b"
 
 
 def test_land_winner_landed_requires_real_file_write(tmp_workspace):

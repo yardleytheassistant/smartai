@@ -237,6 +237,10 @@ both anchored to real state — not the verifier's word):
   tree is never touched. The branch is left for review; `--merge` merges it in only
   if it landed. Use this to edit existing files.
 
+Both land paths run the maker as the **coder** role by default (writing code with
+tools is the coder's job, and small orchestrator builds are weak at tool-calling);
+override with `--maker MODEL` (e.g. a heavier model) if a run won't call the tools.
+
 `python main.py experiment "add a --quiet flag to doctor" --context-file doctor.py --context-file main.py --land-worktree`.
 
 ### Routines — scheduled / triggered runs (laptop-off)
