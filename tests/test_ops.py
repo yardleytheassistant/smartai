@@ -80,6 +80,31 @@ def test_model_family_grouping():
     assert model_family("llama4:scout") == "llama"
 
 
+def test_bench_runs_repeats_each_task_and_averages():
+    """--runs N repeats every (model, task) N times; the aggregates mean over them."""
+    import bench
+    from evals import EvalCase
+    from verifier import Verdict
+
+    scores = iter([0.2, 0.5, 0.8])  # three runs of the same task
+
+    class V:
+        def grade(self, *, goal, artifact, rubric=None):
+            s = next(scores)
+            return Verdict(met=s >= 0.5, score=s, feedback="")
+
+    report = bench.run_bench(
+        ["A"],
+        [EvalCase(id="t1", input="x", rubric="r")],
+        runs=3,
+        run_fn=lambda model, task: model,
+        verifier=V(),
+    )
+    assert len(report.results) == 3  # 1 model x 1 task x 3 runs
+    assert abs(report.avg_score("A") - 0.5) < 1e-9  # mean of 0.2/0.5/0.8
+    assert abs(report.pass_rate("A") - 2 / 3) < 1e-9  # 0.5 and 0.8 meet the bar, 0.2 doesn't
+
+
 def test_bench_report_aggregates():
     import bench
     r = bench.BenchReport(results=[

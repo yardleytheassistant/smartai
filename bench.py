@@ -121,11 +121,18 @@ class BenchReport:
         return model_family(roles["grader"]) != model_family(roles["orchestrator"])
 
 
-def run_bench(models, tasks, *, client=None, run_fn=None, verifier: Verifier | None = None) -> BenchReport:
+def run_bench(
+    models, tasks, *, runs: int = 1, client=None, run_fn=None, verifier: Verifier | None = None
+) -> BenchReport:
     """Run each model over each task, grade, and time it.
 
     `run_fn(model, task)->output` is injectable; the default runs a fresh
     tool-less agent so we measure raw model quality, not tool plumbing.
+
+    `runs` repeats every (model, task) N times — since the maker generates at a
+    non-zero temperature, a single run is noisy; averaging N tightens the score
+    so the scorecard is reproducible. The aggregates (avg_score/avg_latency/
+    pass_rate) already mean over all results, so N runs just feed them N samples.
     """
     if run_fn is None:
         from agent import NovelAgent
@@ -137,12 +144,13 @@ def run_bench(models, tasks, *, client=None, run_fn=None, verifier: Verifier | N
     report = BenchReport()
     for model in models:
         for task in tasks:
-            start = time.perf_counter()
-            output = run_fn(model, task)
-            latency = time.perf_counter() - start
-            verdict = verifier.grade(goal=task.input, artifact=output, rubric=task.rubric or None)
-            report.results.append(
-                BenchResult(model=model, task_id=task.id, score=verdict.score,
-                            met=verdict.met, latency_s=latency)
-            )
+            for _ in range(max(1, runs)):
+                start = time.perf_counter()
+                output = run_fn(model, task)
+                latency = time.perf_counter() - start
+                verdict = verifier.grade(goal=task.input, artifact=output, rubric=task.rubric or None)
+                report.results.append(
+                    BenchResult(model=model, task_id=task.id, score=verdict.score,
+                                met=verdict.met, latency_s=latency)
+                )
     return report

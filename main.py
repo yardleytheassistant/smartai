@@ -10,7 +10,7 @@ Usage:
     python main.py fleet [--probe]         # which role models are live (+ latency)
     python main.py status                  # print the resolved configuration
     python main.py doctor                  # operational self-check (exits non-zero if unhealthy)
-    python main.py bench --models a,b,c    # benchmark models to validate role assignments
+    python main.py bench --models a,b,c    # benchmark models to validate role assignments [--runs N]
     python main.py perf                    # run the goal-loop battery (full maker/verifier loop)
     python main.py experiment "task" [--variants N]   # parallel approaches, keep the best
     python main.py memory                  # print the durable state file
@@ -301,6 +301,7 @@ def cmd_bench(args: list[str]) -> None:
 
     models = None
     tasks_path = None
+    runs = 1
     i = 0
     while i < len(args):
         if args[i] == "--models" and i + 1 < len(args):
@@ -309,14 +310,18 @@ def cmd_bench(args: list[str]) -> None:
         elif args[i] == "--tasks" and i + 1 < len(args):
             tasks_path = args[i + 1]
             i += 2
+        elif args[i] == "--runs" and i + 1 < len(args):
+            runs = max(1, int(args[i + 1]))
+            i += 2
         else:
             i += 1
     if not models:
-        console.print("[red]usage:[/red] bench --models a,b,c [--tasks cases.jsonl]")
+        console.print("[red]usage:[/red] bench --models a,b,c [--tasks cases.jsonl] [--runs N]")
         return
     tasks = bench_mod.load_cases(tasks_path) if tasks_path else bench_mod.load_cases("bench/tasks.jsonl")
-    console.print(f"[dim]benchmarking {len(models)} models over {len(tasks)} tasks…[/dim]")
-    report = bench_mod.run_bench(models, tasks)
+    suffix = f" ×{runs} runs each" if runs > 1 else ""
+    console.print(f"[dim]benchmarking {len(models)} models over {len(tasks)} tasks{suffix}…[/dim]")
+    report = bench_mod.run_bench(models, tasks, runs=runs)
     console.print(Panel(report.scorecard(), title="benchmark", border_style="green", expand=False))
     roles = report.suggested_roles()
     if roles:

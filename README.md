@@ -63,7 +63,9 @@ doctor` runs an operational self-check (workspace writable, server reachable,
 critical role models loaded) and exits non-zero if unhealthy; `python main.py
 bench --models a,b,c` benchmarks models over a task set and grades each with the
 verifier, producing a scorecard and a suggested role assignment — so the
-fleet→role mapping is validated empirically, not by reputation.
+fleet→role mapping is validated empirically, not by reputation. Because the maker
+generates at a non-zero temperature, single-run scores are noisy; `--runs N`
+repeats each (model, task) N times and averages, for reproducible numbers.
 
 Other models in a typical fleet map to alternates: `mistral-large` (creative /
 multilingual drafts), `gemma4:26b` or `phi4:14b` (cheap graders / cheapest
