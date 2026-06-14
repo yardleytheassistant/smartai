@@ -208,6 +208,7 @@ def land_winner(
         land_task,
         rubric=rubric,
         context=context,
+        require_file_write=True,
         client=client,
         max_iterations=max_iterations,
         use_memory=use_memory,
@@ -287,8 +288,8 @@ def land_in_worktree(
         # Point the tool sandbox at the worktree so edits hit the real checkout.
         config.workspace = str(wt.path)
         result = goal_loop(
-            land_task, rubric=rubric, context=context, client=client,
-            max_iterations=max_iterations, use_memory=False, on_event=on_event,
+            land_task, rubric=rubric, context=context, require_file_write=True,
+            client=client, max_iterations=max_iterations, use_memory=False, on_event=on_event,
         )
     finally:
         config.workspace = original_ws

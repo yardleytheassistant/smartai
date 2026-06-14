@@ -181,6 +181,47 @@ def test_goal_loop_grounds_maker_and_verifier_in_context(tmp_workspace):
     assert "MARKER-SRC" in seen["grader"]  # grader grounded
 
 
+def test_goal_loop_require_file_write_rejects_describe_only(tmp_workspace):
+    """require_file_write: a maker that never calls write_file is not-met even if
+    the verifier would approve the text — the loop enforces the action happened."""
+    from loop import goal_loop
+
+    graded = {"n": 0}
+
+    def responder(model, messages, **_):
+        if "verifier" in (messages[0].get("content") or "").lower():
+            graded["n"] += 1
+            return '{"met": true, "score": 1.0, "feedback": ""}'
+        return "Here is the code you asked for:\n```python\nprint('hi')\n```"  # describes, no tool
+
+    result = goal_loop(
+        "write hi.py", require_file_write=True, client=FakeClient(responder),
+        use_memory=False, max_iterations=2,
+    )
+    assert result.met is False
+    assert graded["n"] == 0  # the verifier was never even consulted — no write happened
+    assert "write_file" in (result.verdict.feedback or "")
+
+
+def test_goal_loop_require_file_write_passes_when_tool_used(tmp_workspace):
+    """When the maker actually calls write_file, the loop grades normally and passes."""
+    from loop import goal_loop
+
+    def responder(model, messages, **_):
+        if "verifier" in (messages[0].get("content") or "").lower():
+            return '{"met": true, "score": 1.0, "feedback": ""}'
+        if any("Tool results" in (m.get("content") or "") for m in messages):
+            return "Wrote hi.py."
+        return '<tool_call>{"name": "write_file", "arguments": {"path": "hi.py", "content": "print(1)"}}</tool_call>'
+
+    result = goal_loop(
+        "write hi.py", require_file_write=True, client=FakeClient(responder),
+        use_memory=False, max_iterations=2,
+    )
+    assert result.met is True
+    assert (tmp_workspace / "hi.py").exists()
+
+
 # --- Goal loop: maker -> verifier -> memory ---------------------------------
 
 def _routed_responder(grader_payload):

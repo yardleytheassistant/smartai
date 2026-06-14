@@ -184,7 +184,7 @@ def test_land_winner_landed_requires_real_file_write(tmp_workspace):
 
     winner = Experiment("approach 1", "create out.txt", 0.9, met=True)
     result = experiments.land_winner(
-        "create a file", winner, client=FakeClient(responder), use_memory=False
+        "create a file", winner, client=FakeClient(responder), use_memory=False, max_iterations=1
     )
     assert result.met and result.files_written == ["out.txt"]
     assert result.landed is True
@@ -192,8 +192,9 @@ def test_land_winner_landed_requires_real_file_write(tmp_workspace):
 
 
 def test_land_winner_not_landed_when_maker_only_describes(tmp_workspace):
-    """The demonstrated bug: maker describes the change (no write_file), verifier
-    passes anyway -> met but NOT landed, because nothing hit disk."""
+    """The demonstrated bug: maker describes the change instead of calling
+    write_file. The loop now rejects the no-write iteration (require_file_write)
+    AND the disk check confirms nothing landed — both layers agree."""
     import experiments
     from experiments import Experiment
     from tests.conftest import FakeClient
@@ -206,10 +207,10 @@ def test_land_winner_not_landed_when_maker_only_describes(tmp_workspace):
 
     winner = Experiment("approach 1", "add --quiet to doctor", 0.8, met=True)
     result = experiments.land_winner(
-        "add --quiet", winner, client=FakeClient(responder), use_memory=False
+        "add --quiet", winner, client=FakeClient(responder), use_memory=False, max_iterations=1
     )
-    assert result.met is True          # the verifier was fooled by intent text
-    assert result.files_written == []  # but nothing was written
+    assert result.met is False         # the loop rejected the describe-only iteration
+    assert result.files_written == []  # and nothing was written
     assert result.landed is False      # so it is NOT landed — no false success
 
 
@@ -297,7 +298,7 @@ def test_land_in_worktree_commits_real_edit_and_isolates_main(tmp_path, monkeypa
 
     winner = Experiment("approach 1", "rewrite seed.txt", 0.9, met=True)
     result = experiments.land_in_worktree(
-        "change the seed file", winner, client=FakeClient(responder), root=repo
+        "change the seed file", winner, client=FakeClient(responder), root=repo, max_iterations=1
     )
 
     assert result.committed and result.files_changed == ["seed.txt"]
@@ -328,12 +329,12 @@ def test_land_in_worktree_not_landed_when_maker_only_describes(tmp_path, monkeyp
 
     winner = Experiment("approach 1", "rewrite seed.txt", 0.9, met=True)
     result = experiments.land_in_worktree(
-        "change the seed file", winner, client=FakeClient(responder), root=repo
+        "change the seed file", winner, client=FakeClient(responder), root=repo, max_iterations=1
     )
 
-    assert result.met is True               # verifier was fooled by intent
+    assert result.met is False              # loop rejected the describe-only iteration
     assert result.files_changed == [] and result.committed is False
-    assert result.landed is False           # but git says nothing changed
+    assert result.landed is False           # and git confirms nothing changed
     branches = subprocess.run(
         ["git", "branch", "--list", result.branch], cwd=repo, capture_output=True, text=True
     ).stdout.strip()

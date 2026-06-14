@@ -37,6 +37,7 @@ def goal_loop(
     *,
     rubric=None,  # str | rubric.Rubric | None — passed through to the verifier
     context: str = "",  # real source to ground the maker + grader on (fit, don't invent)
+    require_file_write: bool = False,  # reject iterations that describe instead of writing files
     max_iterations: int | None = None,
     maker_model: str | None = None,
     grader_model: str | None = None,
@@ -57,16 +58,22 @@ def goal_loop(
             on_event(kind, data)
 
     history: list[dict] = []
-    # Ground the maker's task in real source when provided, so it writes code that
-    # fits the codebase instead of inventing APIs (the grader is grounded too, below).
+    # Build the maker's first input: optional source grounding + optional explicit
+    # "use the write_file tool" instruction (smaller models read "write the code" as
+    # "print code in markdown" — be unambiguous), then the task.
+    prefix: list[str] = []
     if context:
-        current_input = (
+        prefix.append(
             "EXISTING SOURCE you must fit — match its modules, APIs, naming, and "
-            "conventions; do not invent things that don't appear below. Write the "
-            f"actual code/edits:\n{context}\n\n---\n\n{task}"
+            "conventions; do not invent things that don't appear below:\n" + context
         )
-    else:
-        current_input = task
+    if require_file_write:
+        prefix.append(
+            "You MUST apply changes by calling the write_file tool. Pasting code in a "
+            "markdown block does NOT modify any file and will be rejected — actually "
+            "call the tool."
+        )
+    current_input = "\n\n---\n\n".join(prefix + [task]) if prefix else task
     output = ""
     verdict: Verdict | None = None
 
@@ -79,7 +86,22 @@ def goal_loop(
         )
         output = maker.run(current_input)
 
-        verdict = verifier.grade(goal=task, artifact=output, rubric=rubric, context=context)
+        # The independent verifier only sees the artifact text. The loop, which can
+        # see the maker's tool trace, enforces that the action actually happened: an
+        # iteration that never called write_file when files were required is not-met,
+        # so the loop iterates toward doing the work instead of describing it.
+        if require_file_write and "write_file" not in getattr(maker, "tools_used", []):
+            verdict = Verdict(
+                met=False,
+                score=0.0,
+                feedback=(
+                    "You did not call the write_file tool, so no file was changed. "
+                    "Describing the edit or pasting code in text does not count — call "
+                    "write_file with the path and full new contents."
+                ),
+            )
+        else:
+            verdict = verifier.grade(goal=task, artifact=output, rubric=rubric, context=context)
         history.append({"iteration": i, "output": output, "verdict": verdict})
         emit("verdict", n=i, met=verdict.met, score=verdict.score, feedback=verdict.feedback)
 

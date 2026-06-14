@@ -100,7 +100,12 @@ python main.py goal "write workspace/fizzbuzz.py and prove it runs" \
 ```
 
 On success the loop distills a lesson and updates the resume pointer; if it gets
-stuck it logs an open failure — both to durable memory.
+stuck it logs an open failure — both to durable memory. For code tasks,
+`require_file_write=True` makes the loop reject any iteration that *describes* a
+change without calling the `write_file` tool (a common small-model habit): the
+maker's tool trace is checked, and a no-write iteration is fed back as "call the
+tool" rather than graded — so the loop iterates toward action. The `--land`
+paths set this automatically.
 
 For sharper signal, grade against a **file-based rubric** (Outcomes-style) where
 each criterion is scored independently for partial credit and pinpointed gaps:

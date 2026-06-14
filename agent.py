@@ -75,6 +75,9 @@ class NovelAgent:
         """
         self.messages.append({"role": "user", "content": user_input})
         schema = tools.openai_schema() if self.use_tools else None
+        # Record tool names used this run so callers (e.g. the goal loop) can tell
+        # whether the model actually acted or merely described the action.
+        self.tools_used: list[str] = []
 
         for _ in range(config.max_steps):
             # Manage context: summarize completed earlier turns if we're over budget.
@@ -118,6 +121,7 @@ class NovelAgent:
 
             text_results: list[str] = []
             for call in calls:
+                self.tools_used.append(call["name"])
                 result = tools.dispatch(call["name"], call["arguments"])
                 if on_tool is not None:
                     on_tool(call["name"], call["arguments"], result)

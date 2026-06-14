@@ -77,6 +77,24 @@ def test_parse_function_parameter_tag_dialect():
     assert json.loads(calls[0]["arguments"]) == {"path": "bench.py"}
 
 
+def test_agent_records_tools_used(tmp_path, monkeypatch):
+    """NovelAgent.tools_used records each tool it called, so the goal loop can tell
+    whether the model acted (called write_file) or merely described the action."""
+    import config as cfg
+    from agent import NovelAgent
+    monkeypatch.setattr(cfg.config, "workspace", str(tmp_path))
+    from tests.conftest import FakeClient
+
+    def responder(model, messages, **_):
+        if any("Tool results" in (m.get("content") or "") for m in messages):
+            return "done"
+        return '<tool_call>{"name": "write_file", "arguments": {"path": "a.txt", "content": "x"}}</tool_call>'
+
+    agent = NovelAgent(client=FakeClient(responder))
+    agent.run("make a file")
+    assert "write_file" in agent.tools_used
+
+
 def test_parse_rejects_non_tool_json():
     import toolcall
     # A plain JSON answer that isn't a registered tool must not be treated as a call.
