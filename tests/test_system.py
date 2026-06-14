@@ -156,6 +156,31 @@ def test_verifier_grades_against_provided_source_context():
     assert not verdict.met
 
 
+def test_goal_loop_grounds_maker_and_verifier_in_context(tmp_workspace):
+    """goal_loop(context=...) folds real source into the maker's task AND the
+    grader, so the land step writes/grades code that fits the code."""
+    from loop import goal_loop
+
+    seen = {"maker": "", "grader": ""}
+
+    def responder(model, messages, **_):
+        sysmsg = (messages[0].get("content") or "").lower()
+        joined = " ".join(m.get("content") or "" for m in messages)
+        if "verifier" in sysmsg:
+            seen["grader"] = joined
+            return '{"met": true, "score": 1.0, "feedback": ""}'
+        seen["maker"] = joined
+        return "wrote the code"
+
+    result = goal_loop(
+        "add a flag", rubric="fits the code", context="MARKER-SRC def run_bench(...)",
+        client=FakeClient(responder), use_memory=False,
+    )
+    assert result.met
+    assert "MARKER-SRC" in seen["maker"]   # maker grounded
+    assert "MARKER-SRC" in seen["grader"]  # grader grounded
+
+
 # --- Goal loop: maker -> verifier -> memory ---------------------------------
 
 def _routed_responder(grader_payload):

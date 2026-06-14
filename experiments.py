@@ -133,6 +133,41 @@ def run_experiments(
     )
 
 
+def land_winner(
+    task: str,
+    winner: Experiment,
+    *,
+    rubric=None,
+    context: str = "",
+    client=None,
+    max_iterations: int | None = None,
+    use_memory: bool = True,
+    on_event=None,
+):
+    """Hand the winning direction to a goal loop that writes and verifies code.
+
+    Experiments explore *directions*; this is the opt-in second leg that turns the
+    chosen direction into an actual, verifier-checked artifact — the full
+    "design exploration -> landed code" pipeline. Returns the goal loop's
+    LoopResult. The same `context` grounds the maker and grader here too.
+    """
+    from loop import goal_loop
+
+    land_task = (
+        f"{task}\n\nUse this approach, chosen by a parallel experiment as the best "
+        f"direction:\n{winner.output}"
+    )
+    return goal_loop(
+        land_task,
+        rubric=rubric,
+        context=context,
+        client=client,
+        max_iterations=max_iterations,
+        use_memory=use_memory,
+        on_event=on_event,
+    )
+
+
 def run_in_worktrees(
     task: str,
     variants: "list[str] | int",

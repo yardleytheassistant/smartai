@@ -134,6 +134,38 @@ def test_delegate_passes_use_tools_through(monkeypatch):
     assert captured["use_tools"] is False
 
 
+def test_land_winner_feeds_direction_into_grounded_goal_loop(monkeypatch):
+    """--land path: the winning direction + context are handed to a goal loop
+    that actually writes/verifies code."""
+    import experiments
+    from experiments import Experiment
+
+    captured = {}
+
+    class FakeResult:
+        met = True
+        iterations = 1
+        output = "code"
+        verdict = None
+
+    def fake_goal_loop(task, **kw):
+        captured["task"] = task
+        captured["context"] = kw.get("context", "")
+        captured["rubric"] = kw.get("rubric")
+        return FakeResult()
+
+    import loop
+    monkeypatch.setattr(loop, "goal_loop", fake_goal_loop)
+
+    winner = Experiment(variant="approach 2", output="add the flag to cmd_bench", score=0.9, met=True)
+    result = experiments.land_winner("add a --json flag", winner, rubric="r", context="SRC-MARKER")
+    assert result.met
+    assert "add the flag to cmd_bench" in captured["task"]  # winner's direction
+    assert "add a --json flag" in captured["task"]          # original task
+    assert captured["context"] == "SRC-MARKER"              # grounding threaded through
+    assert captured["rubric"] == "r"
+
+
 def test_build_context_reads_and_labels_files(tmp_path):
     import experiments
 

@@ -36,6 +36,7 @@ def goal_loop(
     task: str,
     *,
     rubric=None,  # str | rubric.Rubric | None — passed through to the verifier
+    context: str = "",  # real source to ground the maker + grader on (fit, don't invent)
     max_iterations: int | None = None,
     maker_model: str | None = None,
     grader_model: str | None = None,
@@ -56,7 +57,16 @@ def goal_loop(
             on_event(kind, data)
 
     history: list[dict] = []
-    current_input = task
+    # Ground the maker's task in real source when provided, so it writes code that
+    # fits the codebase instead of inventing APIs (the grader is grounded too, below).
+    if context:
+        current_input = (
+            "EXISTING SOURCE you must fit — match its modules, APIs, naming, and "
+            "conventions; do not invent things that don't appear below. Write the "
+            f"actual code/edits:\n{context}\n\n---\n\n{task}"
+        )
+    else:
+        current_input = task
     output = ""
     verdict: Verdict | None = None
 
@@ -69,7 +79,7 @@ def goal_loop(
         )
         output = maker.run(current_input)
 
-        verdict = verifier.grade(goal=task, artifact=output, rubric=rubric)
+        verdict = verifier.grade(goal=task, artifact=output, rubric=rubric, context=context)
         history.append({"iteration": i, "output": output, "verdict": verdict})
         emit("verdict", n=i, met=verdict.met, score=verdict.score, feedback=verdict.feedback)
 

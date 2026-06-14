@@ -216,9 +216,12 @@ verifier can penalize code that references things that don't exist.
 `python main.py experiment "add a --runs flag to bench" --context-file bench.py --context-file main.py`.
 Think of `run_experiments` as **grounded design exploration** — it returns a
 winning *direction that fits the real code*, and how deep (a plan vs. drop-in
-code) tracks the maker model's strength. For variants that actually write and
-commit code in isolation, use `run_in_worktrees`; to turn a winning direction
-into a landed diff, hand it to the orchestrator/goal loop.
+code) tracks the maker model's strength. To go from direction to verified code,
+add `--land`: the winning direction is fed into a source-grounded goal loop
+(`land_winner`) that writes and verifies the code — the full *explore → land*
+pipeline in one command. For variants that write and commit code in isolated
+checkouts, use `run_in_worktrees`.
+`python main.py experiment "add a --runs flag to bench" --context-file bench.py --land`.
 
 ### Routines — scheduled / triggered runs (laptop-off)
 
