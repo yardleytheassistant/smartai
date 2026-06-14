@@ -42,7 +42,7 @@ the heaviest model for everything. Defaults (override any via `.env`):
 | ---- | ------------- | ----------- |
 | **Orchestrator** (`novel`) | `qwen3.5:122b` | strong instruct + tool calling, multilingual, ~81 GB RAM sweet spot for days-long driving |
 | **Heavy / max-capability** | `qwen3:235b` | most capable verified model — reserve for the hardest planning |
-| **Reasoner** (hard + fallback) | `deepseek-r1:70b` | strongest pure reasoning; the "delegate-the-hard-part" tier |
+| **Reasoner** (hard + fallback) | `deepseek-r1:32b` | R1 distill; matched the 70B on reasoning tasks at lower latency/footprint in-bench, so it's the "delegate-the-hard-part" tier (→ `deepseek-r1:70b` when you want max depth) |
 | **Grader / verifier** | `deepseek-r1:32b` | fast R1 distill; a sharp *independent* judge, different family from the maker |
 | **Worker** (fan-out) | `qwen3.6:35b` | MoE 35B/3B-active, 1M ctx, fast — high-volume cheap work |
 | **Coder** | `qwen3-coder:30b` | coding specialist for code-shaped tasks (→ Kimi-Dev 72B) |

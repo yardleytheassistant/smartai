@@ -56,8 +56,10 @@ class Config:
     worker_model: str = field(default_factory=lambda: os.getenv("WORKER_MODEL", "qwen3.6:35b"))
     # Independent verifier: fast reasoning distill, different family from the maker.
     grader_model: str = field(default_factory=lambda: os.getenv("GRADER_MODEL", "deepseek-r1:32b"))
-    # Hard-but-bounded reasoning subtasks the orchestrator delegates.
-    reasoner_model: str = field(default_factory=lambda: os.getenv("REASONER_MODEL", "deepseek-r1:70b"))
+    # Hard-but-bounded reasoning subtasks the orchestrator delegates. The 32B R1
+    # distill matches the 70B on reasoning tasks at lower latency and footprint
+    # (benchmarked), so it's the default; override to 70b via env if preferred.
+    reasoner_model: str = field(default_factory=lambda: os.getenv("REASONER_MODEL", "deepseek-r1:32b"))
     # Coding-shaped tasks: a coding specialist.
     coder_model: str = field(default_factory=lambda: os.getenv("CODER_MODEL", "qwen3-coder:30b"))
     # Huge-context tasks (whole repo / long documents).

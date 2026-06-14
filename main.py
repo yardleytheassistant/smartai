@@ -11,6 +11,7 @@ Usage:
     python main.py status                  # print the resolved configuration
     python main.py doctor                  # operational self-check (exits non-zero if unhealthy)
     python main.py bench --models a,b,c    # benchmark models to validate role assignments
+    python main.py perf                    # run the goal-loop battery (full maker/verifier loop)
     python main.py experiment "task" [--variants N]   # parallel approaches, keep the best
     python main.py memory                  # print the durable state file
     python main.py skills [list|show NAME] # inspect procedural-memory skills
@@ -322,6 +323,54 @@ def cmd_bench(args: list[str]) -> None:
         console.print("suggested: " + "  ".join(f"{r}={m}" for r, m in roles.items()))
 
 
+def cmd_perf(args: list[str]) -> None:
+    import tempfile
+
+    import perf as perf_mod
+    from config import config
+
+    tasks_path = "bench/battery.jsonl"
+    max_iterations = None
+    use_memory = True
+    i = 0
+    while i < len(args):
+        if args[i] == "--tasks" and i + 1 < len(args):
+            tasks_path = args[i + 1]
+            i += 2
+        elif args[i] == "--max-iterations" and i + 1 < len(args):
+            max_iterations = int(args[i + 1])
+            i += 2
+        elif args[i] == "--no-memory":
+            use_memory = False
+            i += 1
+        else:
+            i += 1
+
+    cases = perf_mod.load_cases(tasks_path)
+    console.print(f"[dim]goal-loop battery: {len(cases)} tasks…[/dim]")
+
+    def on_event(kind: str, data: dict) -> None:
+        if kind == "verdict":
+            mark = "[green]met[/green]" if data["met"] else "[yellow]not met[/yellow]"
+            console.print(f"  [dim]iter {data['n']}:[/dim] {mark} (score {data['score']:.2f})")
+
+    # Run against an isolated workspace so the battery never writes the real STATE.md.
+    original = config.workspace
+    tmp = tempfile.mkdtemp(prefix="smartai-perf-")
+    try:
+        config.workspace = tmp
+        report = perf_mod.run_loop_battery(
+            cases, max_iterations=max_iterations, use_memory=use_memory, on_event=on_event
+        )
+    finally:
+        config.workspace = original
+
+    border = "green" if report.all_passed else "red"
+    console.print(Panel(report.scorecard(), title="goal-loop battery", border_style=border, expand=False))
+    if not report.all_passed:
+        sys.exit(1)
+
+
 def cmd_reflect(_args: list[str]) -> None:
     import reflect as reflect_mod
 
@@ -449,6 +498,9 @@ def main() -> None:
         return
     if args[0] == "bench":
         cmd_bench(args[1:])
+        return
+    if args[0] == "perf":
+        cmd_perf(args[1:])
         return
     run_once(" ".join(args))
 

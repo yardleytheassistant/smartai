@@ -119,12 +119,12 @@ def test_role_defaults_map_to_fleet(monkeypatch):
     assert cfg.model == "novel"
     assert cfg.worker_model == "qwen3.6:35b"
     assert cfg.grader_model == "deepseek-r1:32b"
-    assert cfg.reasoner_model == "deepseek-r1:70b"
+    assert cfg.reasoner_model == "deepseek-r1:32b"
     assert cfg.coder_model == "qwen3-coder:30b"
     assert cfg.long_context_model == "llama4:scout"
     assert cfg.heavy_model == "qwen3:235b"
-    # Sensitive-domain tasks fall back to the strongest reasoner by default.
-    assert cfg.fallback_model == "deepseek-r1:70b"
+    # Sensitive-domain tasks fall back to the reasoner by default (cascades).
+    assert cfg.fallback_model == "deepseek-r1:32b"
 
 
 def test_blank_role_override_falls_back_to_primary(monkeypatch):

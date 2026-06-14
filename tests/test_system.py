@@ -116,6 +116,15 @@ def test_verifier_unparseable_is_not_met():
     assert v.met is False and v.score == 0.0
 
 
+def test_verifier_strips_reasoning_then_parses():
+    """A reasoning grader (deepseek-r1) may emit <think> before the JSON; the
+    hardened prompt discourages it, but the parser must survive it regardless."""
+    from verifier import Verifier
+    dirty = '<think>The artifact looks complete and correct.</think>\n{"met": true, "score": 0.88, "feedback": ""}'
+    v = Verifier(client=FakeClient(lambda **_: dirty)).grade(goal="g", artifact="a")
+    assert v.met and v.score == 0.88
+
+
 def test_verifier_sees_artifact_not_maker_reasoning():
     from verifier import Verifier
     client = FakeClient(lambda **_: '{"met": true, "score": 1.0, "feedback": ""}')

@@ -1,4 +1,6 @@
-.PHONY: help install install-dev test lint fmt build-model demo fleet clean
+.PHONY: help install install-dev test lint fmt build-model demo fleet perf clean
+
+MODELS ?= novel,qwen3.6:35b,deepseek-r1:32b
 
 help:
 	@echo "Targets:"
@@ -10,6 +12,7 @@ help:
 	@echo "  build-model  ollama create the 'novel' model from the base"
 	@echo "  demo         run the live compounding demo (needs a model server)"
 	@echo "  fleet        report which role models are live (--probe for latency)"
+	@echo "  perf         run both batteries live: goal-loop + model bench (MODELS=a,b,c)"
 	@echo "  clean        remove caches"
 
 install:
@@ -36,6 +39,10 @@ demo:
 
 fleet:
 	python main.py fleet $(ARGS)
+
+perf:
+	python main.py perf
+	python main.py bench --models $(MODELS)
 
 clean:
 	rm -rf .pytest_cache **/__pycache__ .ruff_cache

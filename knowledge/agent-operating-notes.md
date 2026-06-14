@@ -7,7 +7,7 @@ they are chunked and retrieved by `search_knowledge`.
 ## Model routing
 The orchestrator (novel / qwen3.5:122b) plans and delegates. Simple fan-out work
 goes to the worker (qwen3.6:35b); hard bounded reasoning to the reasoner
-(deepseek-r1:70b); coding tasks to the coder (qwen3-coder:30b); whole-repo or
+(deepseek-r1:32b); coding tasks to the coder (qwen3-coder:30b); whole-repo or
 long-document tasks to the long-context model (llama4:scout). Verification runs
 on an independent grader (deepseek-r1:32b) at temperature 0.
 
