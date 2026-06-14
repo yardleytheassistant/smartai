@@ -306,11 +306,13 @@ tests/               # offline tests (no model/GPU needed)
 The whole system — tools, memory, verifier, goal loop, workflows, router,
 skills, evals, routines (cron matcher, registry, scheduler), and worktrees — is
 covered by offline tests. A fake OpenAI-compatible client drives every model
-call against scripted responses, so nothing needs a server:
+call against scripted responses, so nothing needs a server. Install the dev
+dependencies once, then run the suite (and the linter):
 
 ```bash
-pip install -r requirements-dev.txt
-python -m pytest tests/ -q
+make install-dev           # one-time: pytest + ruff (== pip install -r requirements-dev.txt)
+make test                  # offline suite — no model server / GPU  (or: python -m pytest tests/ -q)
+make lint                  # ruff check
 ```
 
 Most tests use a fake client for unit speed, but `tests/test_http_integration.py`
