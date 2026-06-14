@@ -209,6 +209,13 @@ each with the independent verifier, and keeps the highest scorer;
 `run_in_worktrees` runs code-producing variants in isolated checkouts and can
 merge the winning branch back. `python main.py experiment "task" --variants 3`.
 
+For "implement X **in this repo**" tasks, pass `--context-file PATH` (repeatable):
+the named source is folded into **both** the makers and the grader, so approaches
+fit the existing modules/APIs/conventions instead of inventing them, and the
+verifier can penalize code that references things that don't exist — turning the
+experiment from a sketch generator into one that produces landable diffs.
+`python main.py experiment "add a --runs flag to bench" --context-file bench.py --context-file main.py`.
+
 ### Routines — scheduled / triggered runs (laptop-off)
 
 Hosted "Routines" run in the cloud; the open-source workaround uses local

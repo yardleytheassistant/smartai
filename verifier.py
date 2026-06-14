@@ -50,6 +50,23 @@ class Verdict:
     raw: str = ""
 
 
+def _context_block(context: str) -> str:
+    """A source-grounding block: makes 'fits the existing code' gradeable.
+
+    Without it, a verifier grading a code/design artifact has nothing to check
+    against and rewards plausible-sounding output. With the real source in hand,
+    it can penalize artifacts that reference things that don't exist.
+    """
+    if not context:
+        return ""
+    return (
+        "\nEXISTING SOURCE the artifact must fit. Penalize any module, function, "
+        "class, import, CLI flag, or framework the artifact references that does "
+        "NOT appear below, and any deviation from these conventions:\n"
+        f"{context}\n"
+    )
+
+
 def _extract_json(text: str) -> dict:
     """Pull the first JSON object out of a model response, tolerating fences/prose."""
     fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
@@ -67,12 +84,14 @@ class Verifier:
         self.model = model or config.grader_model
         self.client = client if client is not None else make_client()
 
-    def grade(self, *, goal: str, artifact: str, rubric: "str | Rubric | None" = None) -> Verdict:
+    def grade(
+        self, *, goal: str, artifact: str, rubric: "str | Rubric | None" = None, context: str = ""
+    ) -> Verdict:
         if isinstance(rubric, Rubric):
-            return self.grade_rubric(goal=goal, artifact=artifact, rubric=rubric)
+            return self.grade_rubric(goal=goal, artifact=artifact, rubric=rubric, context=context)
         rubric_block = f"\nRUBRIC (gradable criteria):\n{rubric}\n" if rubric else ""
         user = (
-            f"GOAL:\n{goal}\n{rubric_block}\n"
+            f"GOAL:\n{goal}\n{rubric_block}{_context_block(context)}\n"
             f"ARTIFACT TO GRADE:\n{artifact}\n\n"
             "Grade it now. Return only the JSON verdict."
         )
@@ -96,10 +115,10 @@ class Verifier:
             met, score, feedback = False, 0.0, f"Verifier returned unparseable output: {raw[:300]}"
         return Verdict(met=met, score=score, feedback=feedback, raw=raw)
 
-    def grade_rubric(self, *, goal: str, artifact: str, rubric: Rubric) -> Verdict:
+    def grade_rubric(self, *, goal: str, artifact: str, rubric: Rubric, context: str = "") -> Verdict:
         """Grade each criterion independently; aggregate to a weighted score."""
         user = (
-            f"GOAL:\n{goal}\n\nRUBRIC CRITERIA:\n{rubric.as_prompt()}\n\n"
+            f"GOAL:\n{goal}\n\nRUBRIC CRITERIA:\n{rubric.as_prompt()}\n{_context_block(context)}\n"
             f"ARTIFACT TO GRADE:\n{artifact}\n\nGrade each criterion. Return only the JSON."
         )
         response = self.client.chat.completions.create(

@@ -138,6 +138,24 @@ def test_verifier_sees_artifact_not_maker_reasoning():
     assert "verifier" in sent[0]["content"].lower()
 
 
+def test_verifier_grades_against_provided_source_context():
+    """With real source in hand, the grader can check 'fits the code', not just
+    'sounds complete' — the source and a penalize-what-doesn't-exist instruction
+    both reach the grader's prompt."""
+    from verifier import Verifier
+    client = FakeClient(lambda **_: '{"met": false, "score": 0.2, "feedback": "uses argparse, absent from source"}')
+    verdict = Verifier(client=client).grade(
+        goal="add a --runs flag to bench",
+        artifact="import argparse\nparser = argparse.ArgumentParser()",
+        rubric="fits the existing code",
+        context="# file: bench.py\ndef run_bench(models, tasks, *, runs=1): ...",
+    )
+    user_msg = client.calls[-1]["messages"][-1]["content"]
+    assert "run_bench(models, tasks" in user_msg  # the real source reached the grader
+    assert "penalize" in user_msg.lower()          # grounding instruction present
+    assert not verdict.met
+
+
 # --- Goal loop: maker -> verifier -> memory ---------------------------------
 
 def _routed_responder(grader_payload):

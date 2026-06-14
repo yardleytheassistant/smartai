@@ -71,6 +71,54 @@ def test_run_experiments_default_uses_delegation(monkeypatch):
     assert all("do X" in c and "Approach to try" in c for c in calls)
 
 
+def test_run_experiments_grounds_maker_and_grader_in_context(monkeypatch):
+    """`context` (real source) reaches BOTH the maker and the grader, so an
+    'implement X in this repo' run fits the code instead of inventing it."""
+    import experiments
+    from verifier import Verdict
+
+    seen = {}
+
+    def fake_delegate(task, **kw):
+        seen["maker_task"] = task
+        return "out"
+
+    import subagents
+    monkeypatch.setattr(subagents, "delegate", fake_delegate)
+
+    class RecordingVerifier:
+        def __init__(self, *a, **k):
+            pass
+
+        def grade(self, *, goal, artifact, rubric=None, context=""):
+            seen["grader_context"] = context
+            return Verdict(met=True, score=1.0, feedback="")
+
+    monkeypatch.setattr(experiments, "Verifier", RecordingVerifier)
+
+    report = experiments.run_experiments(
+        "implement --runs in bench",
+        1,
+        context="# file: bench.py\nMARKER-SOURCE def run_bench(...)",
+        max_workers=1,
+    )
+    assert report.winner is not None
+    # Maker saw the source and the "you must fit" instruction.
+    assert "MARKER-SOURCE" in seen["maker_task"]
+    assert "must fit" in seen["maker_task"].lower()
+    # Grader saw the same source to grade fit against.
+    assert "MARKER-SOURCE" in seen["grader_context"]
+
+
+def test_build_context_reads_and_labels_files(tmp_path):
+    import experiments
+
+    (tmp_path / "bench.py").write_text("def run_bench(models, tasks, *, runs=1): ...\n")
+    ctx = experiments.build_context(["bench.py", "missing.py"], root=tmp_path)
+    assert "# file: bench.py" in ctx and "run_bench(models, tasks" in ctx
+    assert "could not read" in ctx  # a missing file is noted, not fatal
+
+
 # --- run_in_worktrees (git-isolated experiments) ----------------------------
 
 def _git(*args, cwd):

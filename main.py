@@ -12,7 +12,7 @@ Usage:
     python main.py doctor                  # operational self-check (exits non-zero if unhealthy)
     python main.py bench --models a,b,c    # benchmark models to validate role assignments [--runs N]
     python main.py perf                    # run the goal-loop battery (full maker/verifier loop)
-    python main.py experiment "task" [--variants N]   # parallel approaches, keep the best
+    python main.py experiment "task" [--variants N] [--context-file PATH]  # parallel approaches, keep the best
     python main.py memory                  # print the durable state file
     python main.py skills [list|show NAME] # inspect procedural-memory skills
     python main.py kb [search Q|add NAME C]# query/extend the knowledge base
@@ -234,6 +234,7 @@ def cmd_experiment(args: list[str]) -> None:
     n = 3
     task_parts: list[str] = []
     rubric = None
+    context_files: list[str] = []
     i = 0
     while i < len(args):
         if args[i] == "--variants" and i + 1 < len(args):
@@ -242,15 +243,20 @@ def cmd_experiment(args: list[str]) -> None:
         elif args[i] == "--rubric" and i + 1 < len(args):
             rubric = args[i + 1]
             i += 2
+        elif args[i] == "--context-file" and i + 1 < len(args):
+            context_files.append(args[i + 1])
+            i += 2
         else:
             task_parts.append(args[i])
             i += 1
     task = " ".join(task_parts)
     if not task:
-        console.print("[red]usage:[/red] experiment \"task\" [--variants N] [--rubric ...]")
+        console.print("[red]usage:[/red] experiment \"task\" [--variants N] [--rubric ...] [--context-file PATH ...]")
         return
-    console.print(f"[dim]running {n} approaches in parallel…[/dim]")
-    report = exp_mod.run_experiments(task, n, rubric=rubric)
+    context = exp_mod.build_context(context_files) if context_files else ""
+    grounding = f", grounded in {len(context_files)} source file(s)" if context_files else ""
+    console.print(f"[dim]running {n} approaches in parallel{grounding}…[/dim]")
+    report = exp_mod.run_experiments(task, n, rubric=rubric, context=context)
     ranked = report.ranked()
     body = "\n".join(
         f"{'★' if e is report.winner else ' '} score {e.score:.2f} "

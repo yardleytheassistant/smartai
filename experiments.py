@@ -14,10 +14,40 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable
 
 from verifier import Verdict, Verifier
 from workflows import fan_out_synthesize
+
+# Makers fan out with clean context, so an "implement X in this repo" task with
+# no source produces plausible-but-wrong code (invented modules/APIs). Folding the
+# real source into BOTH the maker and the grader makes "fits the codebase" a thing
+# the system can actually produce and grade, not just "sounds complete".
+_MAKER_CONTEXT_HEADER = (
+    "EXISTING SOURCE you must fit — match its modules, APIs, naming, and "
+    "conventions. Do NOT invent files, functions, classes, imports, CLI flags, or "
+    "frameworks that don't appear below:"
+)
+
+
+def build_context(paths, *, root=None) -> str:
+    """Read the given files into a labelled source bundle for grounding.
+
+    Paths are resolved relative to `root` (default: the current directory), so a
+    caller can pass repo-relative paths like ['bench.py', 'main.py'].
+    """
+    base = Path(root) if root is not None else Path.cwd()
+    chunks: list[str] = []
+    for p in paths:
+        fp = Path(p) if Path(p).is_absolute() else base / p
+        try:
+            text = fp.read_text(encoding="utf-8")
+        except OSError as exc:
+            chunks.append(f"# file: {p} (could not read: {exc})")
+            continue
+        chunks.append(f"# file: {p}\n{text}")
+    return "\n\n".join(chunks)
 
 
 @dataclass
@@ -58,6 +88,7 @@ def run_experiments(
     variants: "list[str] | int",
     *,
     rubric=None,
+    context: str = "",
     client=None,
     make_fn: Callable[[str], str] | None = None,
     grade_fn: Callable[[str], Verdict] | None = None,
@@ -67,6 +98,8 @@ def run_experiments(
 
     `make_fn(variant)->output` and `grade_fn(output)->Verdict` are injectable;
     the defaults delegate to a routed sub-agent and the independent verifier.
+    `context` (e.g. from `build_context`) is real source folded into both the
+    maker and the grader so outputs fit the codebase instead of inventing it.
     """
     variants = _normalize(variants)
 
@@ -74,13 +107,16 @@ def run_experiments(
         import subagents
 
         def make_fn(variant: str) -> str:  # noqa: F811
-            return subagents.delegate(f"{task}\n\nApproach to try: {variant}", client=client)
+            body = f"{task}\n\nApproach to try: {variant}"
+            if context:
+                body = f"{_MAKER_CONTEXT_HEADER}\n\n{context}\n\n---\n\n{body}"
+            return subagents.delegate(body, client=client)
 
     if grade_fn is None:
         verifier = Verifier(client=client)
 
         def grade_fn(output: str) -> Verdict:  # noqa: F811
-            return verifier.grade(goal=task, artifact=output, rubric=rubric)
+            return verifier.grade(goal=task, artifact=output, rubric=rubric, context=context)
 
     def worker(variant: str) -> Experiment:
         output = make_fn(variant)
@@ -98,6 +134,7 @@ def run_in_worktrees(
     runner: Callable[[str, object], str],
     *,
     rubric=None,
+    context: str = "",
     client=None,
     base: str = "HEAD",
     root=None,
@@ -117,7 +154,7 @@ def run_in_worktrees(
         verifier = Verifier(client=client)
 
         def grade_fn(output: str) -> Verdict:  # noqa: F811
-            return verifier.grade(goal=task, artifact=output, rubric=rubric)
+            return verifier.grade(goal=task, artifact=output, rubric=rubric, context=context)
 
     made: list[tuple[Experiment, object]] = []
     for variant in _normalize(variants):
