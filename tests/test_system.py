@@ -203,6 +203,35 @@ def test_goal_loop_require_file_write_rejects_describe_only(tmp_workspace):
     assert "write_file" in (result.verdict.feedback or "")
 
 
+def test_goal_loop_check_cmd_gates_on_real_behavior(tmp_workspace):
+    """The behavioral gate: even when the maker wrote a file and the verifier
+    approved the text, a failing check command (real exit code) forces not-met —
+    catching code that reads correct but doesn't work."""
+    from loop import goal_loop
+
+    def responder(model, messages, **_):
+        if "verifier" in (messages[0].get("content") or "").lower():
+            return '{"met": true, "score": 1.0, "feedback": ""}'
+        if any("Tool results" in (m.get("content") or "") for m in messages):
+            return "done"
+        return '<tool_call>{"name": "write_file", "arguments": {"path": "a.txt", "content": "x"}}</tool_call>'
+
+    # Check passes -> the loop trusts it and the goal is met.
+    ok = goal_loop(
+        "write a.txt", require_file_write=True, check_cmd="true",
+        client=FakeClient(responder), use_memory=False, max_iterations=1,
+    )
+    assert ok.met is True
+
+    # Check fails -> not met, no matter what the verifier said; feedback names the check.
+    bad = goal_loop(
+        "write a.txt", require_file_write=True, check_cmd="false",
+        client=FakeClient(responder), use_memory=False, max_iterations=1,
+    )
+    assert bad.met is False
+    assert "check" in (bad.verdict.feedback or "").lower()
+
+
 def test_goal_loop_require_file_write_passes_when_tool_used(tmp_workspace):
     """When the maker actually calls write_file, the loop grades normally and passes."""
     from loop import goal_loop

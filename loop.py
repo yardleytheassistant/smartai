@@ -14,6 +14,7 @@ are written back to the state file for next time.
 
 from __future__ import annotations
 
+import subprocess
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -21,6 +22,23 @@ import memory as memory_mod
 from agent import NovelAgent
 from config import config
 from verifier import Verdict, Verifier
+
+
+def _run_check(cmd: str, cwd: str) -> tuple[bool, str]:
+    """Run a behavioral check command; return (passed, tail of output).
+
+    This is how the loop verifies the change actually *works*, not just that it
+    reads correctly — the operator's own integration check (e.g. run the CLI, run
+    a test), gated on the real exit code.
+    """
+    try:
+        r = subprocess.run(
+            cmd, shell=True, cwd=cwd, capture_output=True, text=True, timeout=120
+        )
+    except subprocess.TimeoutExpired:
+        return False, f"check `{cmd}` timed out after 120s"
+    out = ((r.stdout or "") + (r.stderr or "")).strip()
+    return r.returncode == 0, out[-2000:]
 
 
 @dataclass
@@ -38,6 +56,7 @@ def goal_loop(
     rubric=None,  # str | rubric.Rubric | None — passed through to the verifier
     context: str = "",  # real source to ground the maker + grader on (fit, don't invent)
     require_file_write: bool = False,  # reject iterations that describe instead of writing files
+    check_cmd: str = "",  # shell command that must exit 0 — behavioral gate, not just text grading
     max_iterations: int | None = None,
     maker_model: str | None = None,
     grader_model: str | None = None,
@@ -102,6 +121,23 @@ def goal_loop(
             )
         else:
             verdict = verifier.grade(goal=task, artifact=output, rubric=rubric, context=context)
+
+        # Behavioral gate: a verifier reads the artifact; this RUNS it. If the change
+        # reads correct but doesn't work (e.g. a flag added to a signature but never
+        # wired into the CLI), the real exit code catches what static grading misses.
+        if check_cmd and verdict.met:
+            ok, check_out = _run_check(check_cmd, cwd=config.workspace)
+            if not ok:
+                verdict = Verdict(
+                    met=False,
+                    score=min(verdict.score, 0.5),
+                    feedback=(
+                        f"The code reads correct but does NOT work: the check command "
+                        f"`{check_cmd}` failed. Make it pass — update every call site, not "
+                        f"just one (a new CLI flag needs both the arg parser and the "
+                        f"function).\n--- check output ---\n{check_out}"
+                    ),
+                )
         history.append({"iteration": i, "output": output, "verdict": verdict})
         emit("verdict", n=i, met=verdict.met, score=verdict.score, feedback=verdict.feedback)
 

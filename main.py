@@ -12,7 +12,7 @@ Usage:
     python main.py doctor                  # operational self-check (exits non-zero if unhealthy)
     python main.py bench --models a,b,c    # benchmark models to validate role assignments [--runs N]
     python main.py perf                    # run the goal-loop battery (full maker/verifier loop)
-    python main.py experiment "task" [--variants N] [--context-file PATH] [--land | --land-worktree [--merge]] [--maker MODEL]  # explore, keep best, optionally land it
+    python main.py experiment "task" [--variants N] [--context-file PATH] [--land | --land-worktree [--merge]] [--maker MODEL] [--check "CMD"]  # explore, keep best, optionally land it
     python main.py memory                  # print the durable state file
     python main.py skills [list|show NAME] # inspect procedural-memory skills
     python main.py kb [search Q|add NAME C]# query/extend the knowledge base
@@ -239,6 +239,7 @@ def cmd_experiment(args: list[str]) -> None:
     land_worktree = False
     merge = False
     maker_model = None
+    check_cmd = ""
     i = 0
     while i < len(args):
         if args[i] == "--variants" and i + 1 < len(args):
@@ -252,6 +253,9 @@ def cmd_experiment(args: list[str]) -> None:
             i += 2
         elif args[i] == "--maker" and i + 1 < len(args):
             maker_model = args[i + 1]
+            i += 2
+        elif args[i] == "--check" and i + 1 < len(args):
+            check_cmd = args[i + 1]
             i += 2
         elif args[i] == "--land":
             land = True
@@ -307,7 +311,7 @@ def cmd_experiment(args: list[str]) -> None:
 
         result = exp_mod.land_winner(
             task, report.winner, rubric=rubric, context=context,
-            maker_model=maker_model, on_event=on_event,
+            maker_model=maker_model, check_cmd=check_cmd, on_event=on_event,
         )
         # 'landed' requires real files on disk, not just the verifier's verdict.
         if result.landed:
@@ -343,7 +347,7 @@ def cmd_experiment(args: list[str]) -> None:
         try:
             result = exp_mod.land_in_worktree(
                 task, report.winner, rubric=rubric, context=context,
-                maker_model=maker_model, merge=merge, on_event=on_event,
+                maker_model=maker_model, check_cmd=check_cmd, merge=merge, on_event=on_event,
             )
         except Exception as exc:  # noqa: BLE001 - git/worktree failures shouldn't crash the CLI
             console.print(f"[red]could not land in a worktree:[/red] {exc}")

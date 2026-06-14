@@ -241,6 +241,14 @@ Both land paths run the maker as the **coder** role by default (writing code wit
 tools is the coder's job, and small orchestrator builds are weak at tool-calling);
 override with `--maker MODEL` (e.g. a heavier model) if a run won't call the tools.
 
+A verifier *reads* the artifact; `--check "CMD"` *runs* it. The command (e.g.
+`--check "python -m pytest tests/test_doctor.py -q"`) must exit 0 for the goal to
+be met — its real output is fed back on failure and the loop iterates. This is the
+behavioral gate that catches code which reads correct but doesn't work (a flag
+added to a function signature but never wired into the CLI), which static grading
+misses. It's the same anchor-to-reality move as the disk/git checks, applied to
+correctness: claims are checked against an exit code, not the model's text.
+
 `python main.py experiment "add a --quiet flag to doctor" --context-file doctor.py --context-file main.py --land-worktree`.
 
 ### Routines — scheduled / triggered runs (laptop-off)

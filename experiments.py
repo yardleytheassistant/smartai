@@ -184,6 +184,7 @@ def land_winner(
     context: str = "",
     client=None,
     maker_model: str | None = None,
+    check_cmd: str = "",
     max_iterations: int | None = None,
     use_memory: bool = True,
     on_event=None,
@@ -203,8 +204,9 @@ def land_winner(
 
     land_task = (
         f"{task}\n\nUse this approach, chosen by a parallel experiment as the best "
-        f"direction:\n{winner.output}\n\nActually write the file(s) with the "
-        f"write_file tool — do not just describe the change."
+        f"direction:\n{winner.output}\n\nActually write the file(s) with the write_file "
+        f"tool — do not just describe the change. Make it complete: update every file "
+        f"and call site involved, not just one."
     )
     before = _artifact_files(config.workspace)
     result = goal_loop(
@@ -212,6 +214,7 @@ def land_winner(
         rubric=rubric,
         context=context,
         require_file_write=True,
+        check_cmd=check_cmd,
         maker_model=maker_model or config.coder_model,
         client=client,
         max_iterations=max_iterations,
@@ -262,6 +265,7 @@ def land_in_worktree(
     context: str = "",
     client=None,
     maker_model: str | None = None,
+    check_cmd: str = "",
     base: str = "HEAD",
     root=None,
     merge: bool = False,
@@ -285,8 +289,9 @@ def land_in_worktree(
     land_task = (
         f"{task}\n\nUse this approach, chosen by a parallel experiment as the best "
         f"direction:\n{winner.output}\n\nThis is a real checkout of the repo. EDIT the "
-        f"actual files with read_file/write_file — make the change, do not just "
-        f"describe it."
+        f"actual files with read_file/write_file — make the change, do not just describe "
+        f"it. Make it complete: update every file and call site involved (e.g. a new CLI "
+        f"flag needs both the arg parser and the function), not just one."
     )
     original_ws = config.workspace
     try:
@@ -294,7 +299,7 @@ def land_in_worktree(
         config.workspace = str(wt.path)
         result = goal_loop(
             land_task, rubric=rubric, context=context, require_file_write=True,
-            maker_model=maker_model or config.coder_model,
+            check_cmd=check_cmd, maker_model=maker_model or config.coder_model,
             client=client, max_iterations=max_iterations, use_memory=False, on_event=on_event,
         )
     finally:
