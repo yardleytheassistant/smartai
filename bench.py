@@ -12,11 +12,30 @@ suite doubles as a benchmark set.
 
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass, field
 
 from evals import EvalCase, load_cases  # noqa: F401  (re-exported for convenience)
 from verifier import Verifier
+
+# `novel` is built on qwen3.5 (see Modelfile), so for independence purposes it
+# belongs to the qwen family — a qwen grader is NOT independent of a novel maker.
+_FAMILY_ALIASES = {"novel": "qwen"}
+
+
+def model_family(model: str) -> str:
+    """A coarse family token so we can keep the grader independent of the maker.
+
+    Strips the tag and the version so version bumps stay one family:
+    qwen3.6:35b / qwen3.5:122b -> 'qwen', llama4:scout -> 'llama',
+    deepseek-r1:32b -> 'deepseek-r'. Known custom models map via alias.
+    """
+    base = model.split(":")[0].strip().lower()
+    if base in _FAMILY_ALIASES:
+        return _FAMILY_ALIASES[base]
+    m = re.match(r"^([a-z][a-z\-]*?)\d", base)
+    return m.group(1).rstrip("-") if m else base
 
 
 @dataclass
@@ -67,14 +86,39 @@ class BenchReport:
         return "\n".join(lines)
 
     def suggested_roles(self) -> dict[str, str]:
-        """A naive role suggestion from the results: best score -> orchestrator,
-        fastest among those that pass the bar -> worker."""
+        """Suggest role assignments from the results.
+
+        best score -> orchestrator; fastest among the passers -> worker; and the
+        grader is the best-scoring model from a DIFFERENT family than the
+        orchestrator. Independence is the whole point of a verifier — a grader
+        that shares the maker's family defeats the cross-check — so we never
+        suggest a same-family grader unless the fleet has no other family.
+        """
         ranked = self.ranked()
         if not ranked:
             return {}
+        orchestrator = ranked[0]
         passers = [m for m in ranked if self.pass_rate(m) >= 0.5] or ranked
         worker = min(passers, key=self.avg_latency)
-        return {"orchestrator": ranked[0], "worker": worker, "grader": ranked[-1]}
+
+        orch_family = model_family(orchestrator)
+        independent = [m for m in ranked if model_family(m) != orch_family]
+        indep_passers = [m for m in independent if self.pass_rate(m) >= 0.5]
+        # ranked is best-first, so [0] of any filtered list is its top scorer.
+        grader = (
+            indep_passers
+            or independent
+            or [m for m in ranked if m != orchestrator]
+            or [orchestrator]
+        )[0]
+        return {"orchestrator": orchestrator, "worker": worker, "grader": grader}
+
+    def grader_is_independent(self, roles: "dict[str, str] | None" = None) -> bool:
+        """True if the suggested grader is from a different family than the orchestrator."""
+        roles = roles or self.suggested_roles()
+        if "grader" not in roles or "orchestrator" not in roles:
+            return False
+        return model_family(roles["grader"]) != model_family(roles["orchestrator"])
 
 
 def run_bench(models, tasks, *, client=None, run_fn=None, verifier: Verifier | None = None) -> BenchReport:

@@ -321,6 +321,12 @@ def cmd_bench(args: list[str]) -> None:
     roles = report.suggested_roles()
     if roles:
         console.print("suggested: " + "  ".join(f"{r}={m}" for r, m in roles.items()))
+        if not report.grader_is_independent(roles):
+            console.print(
+                "[yellow]warning:[/yellow] suggested grader shares the orchestrator's "
+                "model family — no independent grader was in this set. Add a "
+                "different-family model so verification stays a real cross-check."
+            )
 
 
 def cmd_perf(args: list[str]) -> None:
@@ -367,6 +373,10 @@ def cmd_perf(args: list[str]) -> None:
 
     border = "green" if report.all_passed else "red"
     console.print(Panel(report.scorecard(), title="goal-loop battery", border_style=border, expand=False))
+    console.print(
+        "[dim]note: this is the goal-loop battery only. "
+        "Run `python main.py bench --models a,b,c` (or `make perf`) for the model scorecard.[/dim]"
+    )
     if not report.all_passed:
         sys.exit(1)
 

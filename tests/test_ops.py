@@ -33,8 +33,51 @@ def test_bench_ranks_models_and_suggests_roles():
     assert report.ranked() == ["A", "B", "C"]
     assert report.best() == "A"
     roles = report.suggested_roles()
-    assert roles["orchestrator"] == "A" and roles["grader"] == "C"
+    # Orchestrator is the top scorer; the grader is the best-scoring model that
+    # both clears the pass bar and is a different family — C fails its own tasks
+    # (0.2), so B is the better independent judge.
+    assert roles["orchestrator"] == "A" and roles["grader"] == "B"
     assert len(report.results) == 6  # 3 models x 2 tasks
+
+
+def test_suggested_grader_is_family_independent_of_orchestrator():
+    """The grader must not share the maker's family — even when 'novel' is the
+    top scorer, since novel is built on qwen (so a qwen grader isn't independent)."""
+    import bench
+
+    # novel (qwen family) is the best; qwen3.6 is also qwen; r1 is independent.
+    report = bench.BenchReport(results=[
+        bench.BenchResult("novel", "t1", 1.00, True, 1.0),
+        bench.BenchResult("qwen3.6:35b", "t1", 0.98, True, 0.5),
+        bench.BenchResult("deepseek-r1:32b", "t1", 0.90, True, 2.0),
+    ])
+    roles = report.suggested_roles()
+    assert roles["orchestrator"] == "novel"
+    # Not qwen3.6 (same family as novel) — must be the independent R1 model.
+    assert roles["grader"] == "deepseek-r1:32b"
+    assert report.grader_is_independent(roles)
+
+
+def test_suggested_grader_flags_when_no_independent_model():
+    """A single-family fleet can't yield an independent grader; report says so."""
+    import bench
+
+    report = bench.BenchReport(results=[
+        bench.BenchResult("novel", "t1", 1.0, True, 1.0),
+        bench.BenchResult("qwen3.6:35b", "t1", 0.9, True, 0.5),
+    ])
+    roles = report.suggested_roles()
+    assert roles["grader"] != roles["orchestrator"]  # still avoids the exact same model
+    assert report.grader_is_independent(roles) is False  # but family collides — flagged
+
+
+def test_model_family_grouping():
+    from bench import model_family
+
+    assert model_family("qwen3.6:35b") == model_family("qwen3.5:122b") == "qwen"
+    assert model_family("novel") == "qwen"  # alias: built on qwen
+    assert model_family("deepseek-r1:32b") == "deepseek-r"
+    assert model_family("llama4:scout") == "llama"
 
 
 def test_bench_report_aggregates():
