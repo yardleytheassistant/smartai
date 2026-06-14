@@ -203,6 +203,33 @@ def test_goal_loop_require_file_write_rejects_describe_only(tmp_workspace):
     assert "write_file" in (result.verdict.feedback or "")
 
 
+def test_goal_loop_regrounds_context_and_instructions_on_retry(tmp_workspace):
+    """The standing instructions (source grounding + tool-use) must persist on
+    every iteration — dropping them on retry is exactly when the maker needs them."""
+    from loop import goal_loop
+
+    maker_inputs = []
+    grade = {"n": 0}
+
+    def responder(model, messages, **_):
+        if "verifier" in (messages[0].get("content") or "").lower():
+            grade["n"] += 1
+            return ('{"met": false, "score": 0.3, "feedback": "again"}' if grade["n"] == 1
+                    else '{"met": true, "score": 1.0, "feedback": ""}')
+        users = [m for m in messages if m.get("role") == "user"]
+        maker_inputs.append(users[-1]["content"] if users else "")
+        return "an attempt"
+
+    result = goal_loop(
+        "do the thing", context="MARKER-SRC", client=FakeClient(responder),
+        use_memory=False, max_iterations=2,
+    )
+    assert result.met and result.iterations == 2
+    assert len(maker_inputs) == 2
+    assert "MARKER-SRC" in maker_inputs[0]
+    assert "MARKER-SRC" in maker_inputs[1]  # re-grounded on the retry, not just iter 1
+
+
 def test_goal_loop_check_cmd_gates_on_real_behavior(tmp_workspace):
     """The behavioral gate: even when the maker wrote a file and the verifier
     approved the text, a failing check command (real exit code) forces not-met —

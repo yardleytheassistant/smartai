@@ -324,6 +324,35 @@ def test_land_in_worktree_commits_real_edit_and_isolates_main(tmp_path, monkeypa
     assert (repo / "seed.txt").read_text() == "seed"  # main working tree untouched
 
 
+def test_land_in_worktree_repeat_runs_do_not_collide(tmp_path, monkeypatch):
+    """Re-running the same winner is safe: each land gets a unique branch and the
+    checkout is always cleaned up (no leak, no branch-already-exists crash)."""
+    import config as cfg
+    import experiments
+    from experiments import Experiment
+    from tests.conftest import FakeClient
+
+    repo = tmp_path / "repo"
+    _seed_repo(repo)
+    monkeypatch.setattr(cfg.config, "workspace", str(tmp_path / "ws"))
+
+    def responder(model, messages, **_):
+        if "verifier" in (messages[0].get("content") or "").lower():
+            return '{"met": true, "score": 1.0, "feedback": ""}'
+        if any("Tool results" in (m.get("content") or "") for m in messages):
+            return "edited."
+        return '<tool_call>{"name": "write_file", "arguments": {"path": "seed.txt", "content": "E"}}</tool_call>'
+
+    winner = Experiment("approach 1", "rewrite seed.txt", 0.9, met=True)
+    r1 = experiments.land_in_worktree("change it", winner, client=FakeClient(responder), root=repo, max_iterations=1)
+    r2 = experiments.land_in_worktree("change it", winner, client=FakeClient(responder), root=repo, max_iterations=1)
+    assert r1.landed and r2.landed
+    assert r1.branch != r2.branch  # unique per run
+    # No checkout dirs left behind under .worktrees.
+    leftover = list((repo / ".worktrees").glob("*")) if (repo / ".worktrees").is_dir() else []
+    assert leftover == []
+
+
 def test_land_in_worktree_not_landed_when_maker_only_describes(tmp_path, monkeypatch):
     """No edit -> nothing committed -> not landed, and the empty branch is dropped."""
     import config as cfg

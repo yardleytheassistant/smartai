@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -282,10 +283,10 @@ def land_in_worktree(
     The main working tree is untouched; the branch is left for review.
     """
     import worktrees
-    from loop import goal_loop
 
-    branch = f"land/{_slug(winner.variant)}"
-    wt = worktrees.create(branch, base=base, root=root)
+    # Unique branch so re-running the same winner doesn't collide with a kept
+    # review branch from a previous run.
+    branch = f"land/{_slug(winner.variant)}-{uuid.uuid4().hex[:8]}"
     land_task = (
         f"{task}\n\nUse this approach, chosen by a parallel experiment as the best "
         f"direction:\n{winner.output}\n\nThis is a real checkout of the repo. EDIT the "
@@ -293,53 +294,71 @@ def land_in_worktree(
         f"it. Make it complete: update every file and call site involved (e.g. a new CLI "
         f"flag needs both the arg parser and the function), not just one."
     )
+    wt = worktrees.create(branch, base=base, root=root)
+    committed = False
+    try:
+        result = _run_land_loop(
+            wt, land_task, rubric=rubric, context=context, check_cmd=check_cmd,
+            maker_model=maker_model, client=client, max_iterations=max_iterations,
+            on_event=on_event,
+        )
+
+        # Git tells the truth about what changed — not the verifier, not the maker.
+        # Porcelain lines are "XY <path>"; split on whitespace (the leading status
+        # space may have been stripped) and take the path.
+        status = worktrees._git("status", "--porcelain", cwd=wt.path)
+        files_changed = sorted(
+            line.split(maxsplit=1)[-1] for line in status.splitlines() if line.strip()
+        )
+        diffstat = ""
+        if files_changed:
+            worktrees._git("add", "-A", cwd=wt.path)
+            worktrees._git("commit", "-m", f"land: {task[:60]}", cwd=wt.path)
+            committed = True
+            diffstat = worktrees._git("show", "--stat", "--oneline", "HEAD", cwd=wt.path)
+
+        merged = False
+        if merge and result.met and committed:
+            try:
+                worktrees._git("merge", "--no-ff", "--no-edit", branch, cwd=root)
+                merged = True
+            except worktrees.WorktreeError:
+                # A conflict would otherwise leave the main tree half-merged; abort it.
+                try:
+                    worktrees._git("merge", "--abort", cwd=root)
+                except worktrees.WorktreeError:
+                    pass
+
+        return WorktreeLandResult(
+            met=result.met, iterations=result.iterations, output=result.output,
+            branch=branch, files_changed=files_changed, committed=committed,
+            merged=merged, diffstat=diffstat, verdict=result.verdict,
+        )
+    finally:
+        # Always remove the checkout; keep the branch only if it holds a commit.
+        try:
+            worktrees.remove(wt, root=root)
+            if not committed:
+                worktrees._git("branch", "-D", branch, cwd=root)
+        except worktrees.WorktreeError:
+            pass
+
+
+def _run_land_loop(wt, land_task, *, rubric, context, check_cmd, maker_model,
+                   client, max_iterations, on_event):
+    """Run the land goal loop with the tool sandbox pointed at the worktree."""
+    from loop import goal_loop
+
     original_ws = config.workspace
     try:
-        # Point the tool sandbox at the worktree so edits hit the real checkout.
         config.workspace = str(wt.path)
-        result = goal_loop(
+        return goal_loop(
             land_task, rubric=rubric, context=context, require_file_write=True,
             check_cmd=check_cmd, maker_model=maker_model or config.coder_model,
             client=client, max_iterations=max_iterations, use_memory=False, on_event=on_event,
         )
     finally:
         config.workspace = original_ws
-
-    # Git tells the truth about what changed — not the verifier, not the maker.
-    # Porcelain lines are "XY <path>"; split on whitespace (the leading status
-    # space may have been stripped) and take the path.
-    status = worktrees._git("status", "--porcelain", cwd=wt.path)
-    files_changed = sorted(
-        line.split(maxsplit=1)[-1] for line in status.splitlines() if line.strip()
-    )
-    committed = False
-    diffstat = ""
-    if files_changed:
-        worktrees._git("add", "-A", cwd=wt.path)
-        worktrees._git("commit", "-m", f"land: {task[:60]}", cwd=wt.path)
-        committed = True
-        diffstat = worktrees._git("show", "--stat", "--oneline", "HEAD", cwd=wt.path)
-
-    landed = result.met and committed
-    merged = False
-    if merge and landed:
-        worktrees._git("merge", "--no-ff", "--no-edit", branch, cwd=root)
-        merged = True
-
-    # Remove the checkout dir; keep the branch (it holds the commit) for review,
-    # but drop an empty branch if nothing was committed.
-    try:
-        worktrees.remove(wt, root=root)
-        if not committed:
-            worktrees._git("branch", "-D", branch, cwd=root)
-    except worktrees.WorktreeError:
-        pass
-
-    return WorktreeLandResult(
-        met=result.met, iterations=result.iterations, output=result.output,
-        branch=branch, files_changed=files_changed, committed=committed,
-        merged=merged, diffstat=diffstat, verdict=result.verdict,
-    )
 
 
 def run_in_worktrees(

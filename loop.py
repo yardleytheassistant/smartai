@@ -77,22 +77,29 @@ def goal_loop(
             on_event(kind, data)
 
     history: list[dict] = []
-    # Build the maker's first input: optional source grounding + optional explicit
-    # "use the write_file tool" instruction (smaller models read "write the code" as
-    # "print code in markdown" — be unambiguous), then the task.
-    prefix: list[str] = []
+    # Standing instructions that must persist on EVERY iteration, not just the first:
+    # source grounding (fit the real code) and the explicit "use the write_file tool"
+    # nudge (smaller models read "write the code" as "print code in markdown"). These
+    # are prepended to each maker input — dropping them on retries is exactly when the
+    # maker, having already failed once, most needs them.
+    standing: list[str] = []
     if context:
-        prefix.append(
+        standing.append(
             "EXISTING SOURCE you must fit — match its modules, APIs, naming, and "
             "conventions; do not invent things that don't appear below:\n" + context
         )
     if require_file_write:
-        prefix.append(
+        standing.append(
             "You MUST apply changes by calling the write_file tool. Pasting code in a "
             "markdown block does NOT modify any file and will be rejected — actually "
             "call the tool."
         )
-    current_input = "\n\n---\n\n".join(prefix + [task]) if prefix else task
+    standing_block = "\n\n---\n\n".join(standing)
+
+    def _maker_input(body: str) -> str:
+        return f"{standing_block}\n\n---\n\n{body}" if standing_block else body
+
+    current_input = _maker_input(task)
     output = ""
     verdict: Verdict | None = None
 
@@ -150,8 +157,9 @@ def goal_loop(
             emit("done", met=True, iterations=i)
             return LoopResult(met=True, iterations=i, output=output, verdict=verdict, history=history)
 
-        # Not met: feed the gap back to the next maker.
-        current_input = (
+        # Not met: feed the gap back to the next maker, re-attaching the standing
+        # instructions (grounding + tool-use) so the retry keeps them.
+        current_input = _maker_input(
             f"{task}\n\n"
             f"A verifier reviewed your previous attempt and it did NOT meet the goal.\n"
             f"Score: {verdict.score:.2f}\n"
