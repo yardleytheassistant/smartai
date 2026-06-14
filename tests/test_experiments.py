@@ -265,6 +265,81 @@ def test_run_in_worktrees_isolates_and_merges_winner(tmp_path):
     assert (repo / "solution.txt").read_text() == "solution from good-approach"
 
 
+def _seed_repo(repo):
+    repo.mkdir()
+    _git("init", "-b", "main", cwd=repo)
+    _git("config", "user.email", "t@t.t", cwd=repo)
+    _git("config", "user.name", "t", cwd=repo)
+    _git("config", "commit.gpgsign", "false", cwd=repo)
+    (repo / "seed.txt").write_text("seed")
+    _git("add", ".", cwd=repo)
+    _git("commit", "-m", "init", cwd=repo)
+
+
+def test_land_in_worktree_commits_real_edit_and_isolates_main(tmp_path, monkeypatch):
+    """The maker edits a REAL tracked file in an isolated checkout; git confirms the
+    change, it's committed on a branch, and the main working tree is untouched."""
+    import config as cfg
+    import experiments
+    from experiments import Experiment
+    from tests.conftest import FakeClient
+
+    repo = tmp_path / "repo"
+    _seed_repo(repo)
+    monkeypatch.setattr(cfg.config, "workspace", str(tmp_path / "ws"))
+
+    def responder(model, messages, **_):
+        if "verifier" in (messages[0].get("content") or "").lower():
+            return '{"met": true, "score": 1.0, "feedback": ""}'
+        if any("Tool results" in (m.get("content") or "") for m in messages):
+            return "Edited seed.txt."
+        return '<tool_call>{"name": "write_file", "arguments": {"path": "seed.txt", "content": "EDITED"}}</tool_call>'
+
+    winner = Experiment("approach 1", "rewrite seed.txt", 0.9, met=True)
+    result = experiments.land_in_worktree(
+        "change the seed file", winner, client=FakeClient(responder), root=repo
+    )
+
+    assert result.committed and result.files_changed == ["seed.txt"]
+    assert result.landed is True and result.merged is False
+    # The change lives on the review branch, not on main.
+    log = subprocess.run(
+        ["git", "log", result.branch, "--oneline"], cwd=repo, capture_output=True, text=True
+    ).stdout
+    assert "land:" in log
+    assert (repo / "seed.txt").read_text() == "seed"  # main working tree untouched
+
+
+def test_land_in_worktree_not_landed_when_maker_only_describes(tmp_path, monkeypatch):
+    """No edit -> nothing committed -> not landed, and the empty branch is dropped."""
+    import config as cfg
+    import experiments
+    from experiments import Experiment
+    from tests.conftest import FakeClient
+
+    repo = tmp_path / "repo"
+    _seed_repo(repo)
+    monkeypatch.setattr(cfg.config, "workspace", str(tmp_path / "ws"))
+
+    def responder(model, messages, **_):
+        if "verifier" in (messages[0].get("content") or "").lower():
+            return '{"met": true, "score": 1.0, "feedback": ""}'
+        return "Let me edit seed.txt to make the change."  # describes, never calls write_file
+
+    winner = Experiment("approach 1", "rewrite seed.txt", 0.9, met=True)
+    result = experiments.land_in_worktree(
+        "change the seed file", winner, client=FakeClient(responder), root=repo
+    )
+
+    assert result.met is True               # verifier was fooled by intent
+    assert result.files_changed == [] and result.committed is False
+    assert result.landed is False           # but git says nothing changed
+    branches = subprocess.run(
+        ["git", "branch", "--list", result.branch], cwd=repo, capture_output=True, text=True
+    ).stdout.strip()
+    assert branches == ""                   # empty branch was cleaned up
+
+
 # --- fleet latency probe -----------------------------------------------------
 
 def test_fleet_probe_returns_latency(monkeypatch):

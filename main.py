@@ -12,7 +12,7 @@ Usage:
     python main.py doctor                  # operational self-check (exits non-zero if unhealthy)
     python main.py bench --models a,b,c    # benchmark models to validate role assignments [--runs N]
     python main.py perf                    # run the goal-loop battery (full maker/verifier loop)
-    python main.py experiment "task" [--variants N] [--context-file PATH] [--land]  # explore, keep best, optionally land it
+    python main.py experiment "task" [--variants N] [--context-file PATH] [--land | --land-worktree [--merge]]  # explore, keep best, optionally land it
     python main.py memory                  # print the durable state file
     python main.py skills [list|show NAME] # inspect procedural-memory skills
     python main.py kb [search Q|add NAME C]# query/extend the knowledge base
@@ -236,6 +236,8 @@ def cmd_experiment(args: list[str]) -> None:
     rubric = None
     context_files: list[str] = []
     land = False
+    land_worktree = False
+    merge = False
     i = 0
     while i < len(args):
         if args[i] == "--variants" and i + 1 < len(args):
@@ -250,12 +252,18 @@ def cmd_experiment(args: list[str]) -> None:
         elif args[i] == "--land":
             land = True
             i += 1
+        elif args[i] == "--land-worktree":
+            land_worktree = True
+            i += 1
+        elif args[i] == "--merge":
+            merge = True
+            i += 1
         else:
             task_parts.append(args[i])
             i += 1
     task = " ".join(task_parts)
     if not task:
-        console.print("[red]usage:[/red] experiment \"task\" [--variants N] [--rubric ...] [--context-file PATH ...] [--land]")
+        console.print("[red]usage:[/red] experiment \"task\" [--variants N] [--rubric ...] [--context-file PATH ...] [--land | --land-worktree [--merge]]")
         return
     context = exp_mod.build_context(context_files) if context_files else ""
     grounding = f", grounded in {len(context_files)} source file(s)" if context_files else ""
@@ -270,11 +278,11 @@ def cmd_experiment(args: list[str]) -> None:
     console.print(Panel(body, title="experiments", border_style="green", expand=False))
     if report.winner:
         console.print(Panel(report.winner.output, title="winner", border_style="green", expand=False))
-        if not land:
+        if not (land or land_worktree):
             console.print(
                 "[dim]experiment = grounded design exploration: a winning direction that fits "
-                "the code. Re-run with --land to feed it into a goal loop that writes and "
-                "verifies the code (or use run_in_worktrees).[/dim]"
+                "the code. Re-run with --land (writes a workspace artifact) or "
+                "--land-worktree (edits real repo files on a review branch).[/dim]"
             )
 
     if land and report.winner:
@@ -309,6 +317,49 @@ def cmd_experiment(args: list[str]) -> None:
         console.print(
             Panel(f"{result.output}\n\n[dim]{footer}[/dim]",
                   title=f"{title}  ({result.iterations} iter)", border_style=style, expand=False)
+        )
+
+    if land_worktree and report.winner:
+        if not report.winner.met:
+            console.print(
+                "[red]winner did not meet the rubric[/red] — refusing to land a bad seed. "
+                "Tighten the approach/rubric first."
+            )
+            return
+
+        def on_event(kind: str, data: dict) -> None:
+            if kind == "verdict":
+                mark = "[green]met[/green]" if data["met"] else "[yellow]not met[/yellow]"
+                console.print(f"  [dim]iter {data['n']}:[/dim] {mark} (score {data['score']:.2f})")
+                if not data["met"] and data["feedback"]:
+                    console.print(f"  [dim]feedback:[/dim] {data['feedback']}")
+
+        console.print("[dim]landing as a real repo edit in an isolated worktree…[/dim]")
+        try:
+            result = exp_mod.land_in_worktree(
+                task, report.winner, rubric=rubric, context=context, merge=merge, on_event=on_event
+            )
+        except Exception as exc:  # noqa: BLE001 - git/worktree failures shouldn't crash the CLI
+            console.print(f"[red]could not land in a worktree:[/red] {exc}")
+            return
+        # Git is the source of truth: 'landed' = verifier met AND a real commit.
+        if result.landed:
+            title, style = "landed ✓", "green"
+            footer = (
+                f"committed to branch [bold]{result.branch}[/bold] "
+                f"({len(result.files_changed)} file(s)); "
+                + ("merged into the current branch." if result.merged
+                   else f"review with: git diff ...{result.branch}  ·  merge with: git merge {result.branch}")
+            )
+        elif result.committed:
+            title, style = "changed files but verifier did NOT pass ⚠ — not landed", "yellow"
+            footer = f"left on branch [bold]{result.branch}[/bold] for inspection; not merged"
+        else:
+            title, style = "no repo edit made ✗", "red"
+            footer = "the maker did not edit any file (nothing committed)"
+        detail = (result.diffstat + "\n\n" if result.diffstat else "") + f"[dim]{footer}[/dim]"
+        console.print(
+            Panel(detail, title=f"{title}  ({result.iterations} iter)", border_style=style, expand=False)
         )
 
 

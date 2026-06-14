@@ -224,6 +224,112 @@ def land_winner(
     )
 
 
+@dataclass
+class WorktreeLandResult:
+    """Outcome of landing a winner as a real repo edit in an isolated worktree.
+
+    `files_changed` and `committed` come from git in the worktree — the actual
+    source of truth — so `landed` (met AND real committed changes) can't be faked
+    by a maker that only describes the work. The change lands on `branch` for review
+    (and is merged only if `merged`); the main working tree is never touched.
+    """
+
+    met: bool
+    iterations: int
+    output: str
+    branch: str
+    files_changed: list[str] = field(default_factory=list)
+    committed: bool = False
+    merged: bool = False
+    diffstat: str = ""
+    verdict: Verdict | None = None
+
+    @property
+    def landed(self) -> bool:
+        return self.met and self.committed
+
+
+def land_in_worktree(
+    task: str,
+    winner: Experiment,
+    *,
+    rubric=None,
+    context: str = "",
+    client=None,
+    base: str = "HEAD",
+    root=None,
+    merge: bool = False,
+    max_iterations: int | None = None,
+    on_event=None,
+) -> WorktreeLandResult:
+    """Land the winning direction as a REAL repo edit, isolated in a git worktree.
+
+    Unlike `land_winner` (which writes a new file to the workspace sandbox), this
+    points the agent's file tools at a fresh checkout of the repo, so it edits the
+    actual source files. Git is the source of truth: changes are committed on a
+    `land/<variant>` branch, `files_changed`/`committed` come from `git status`, and
+    the change is merged into the current branch only if `merge=True` AND it landed.
+    The main working tree is untouched; the branch is left for review.
+    """
+    import worktrees
+    from loop import goal_loop
+
+    branch = f"land/{_slug(winner.variant)}"
+    wt = worktrees.create(branch, base=base, root=root)
+    land_task = (
+        f"{task}\n\nUse this approach, chosen by a parallel experiment as the best "
+        f"direction:\n{winner.output}\n\nThis is a real checkout of the repo. EDIT the "
+        f"actual files with read_file/write_file — make the change, do not just "
+        f"describe it."
+    )
+    original_ws = config.workspace
+    try:
+        # Point the tool sandbox at the worktree so edits hit the real checkout.
+        config.workspace = str(wt.path)
+        result = goal_loop(
+            land_task, rubric=rubric, context=context, client=client,
+            max_iterations=max_iterations, use_memory=False, on_event=on_event,
+        )
+    finally:
+        config.workspace = original_ws
+
+    # Git tells the truth about what changed — not the verifier, not the maker.
+    # Porcelain lines are "XY <path>"; split on whitespace (the leading status
+    # space may have been stripped) and take the path.
+    status = worktrees._git("status", "--porcelain", cwd=wt.path)
+    files_changed = sorted(
+        line.split(maxsplit=1)[-1] for line in status.splitlines() if line.strip()
+    )
+    committed = False
+    diffstat = ""
+    if files_changed:
+        worktrees._git("add", "-A", cwd=wt.path)
+        worktrees._git("commit", "-m", f"land: {task[:60]}", cwd=wt.path)
+        committed = True
+        diffstat = worktrees._git("show", "--stat", "--oneline", "HEAD", cwd=wt.path)
+
+    landed = result.met and committed
+    merged = False
+    if merge and landed:
+        worktrees._git("merge", "--no-ff", "--no-edit", branch, cwd=root)
+        merged = True
+
+    # Remove the checkout dir; keep the branch (it holds the commit) for review,
+    # but drop an empty branch if nothing was committed.
+    try:
+        worktrees.remove(wt, root=root)
+        if not committed:
+            worktrees._git("branch", "-D", branch, cwd=root)
+    except worktrees.WorktreeError:
+        pass
+
+    return WorktreeLandResult(
+        met=result.met, iterations=result.iterations, output=result.output,
+        branch=branch, files_changed=files_changed, committed=committed,
+        merged=merged, diffstat=diffstat, verdict=result.verdict,
+    )
+
+
 def run_in_worktrees(
     task: str,
     variants: "list[str] | int",

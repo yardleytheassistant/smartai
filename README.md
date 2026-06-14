@@ -216,15 +216,23 @@ verifier can penalize code that references things that don't exist.
 `python main.py experiment "add a --runs flag to bench" --context-file bench.py --context-file main.py`.
 Think of `run_experiments` as **grounded design exploration** — it returns a
 winning *direction that fits the real code*, and how deep (a plan vs. drop-in
-code) tracks the maker model's strength. To go from direction to a verified
-artifact, add `--land` (only if the winner met the rubric): the direction is fed
-into a source-grounded goal loop that writes a file **to the workspace** and is
-graded. `land_winner` snapshots the workspace before/after, so it reports
-`landed ✓` **only when files actually changed on disk** — a verifier that passes
-on described-but-unwritten work is flagged, not counted as success. This writes
-to the workspace sandbox, so it suits *new-code* tasks; to **edit existing repo
-files**, use `run_in_worktrees` (each variant gets a real checkout to edit and
-commit). `python main.py experiment "write a JSON-scorecard helper" --context-file bench.py --land`.
+code) tracks the maker model's strength. Two opt-in ways to turn the winning
+direction into verified code (both gated on the winner meeting the rubric, and
+both anchored to real state — not the verifier's word):
+
+- `--land` — feeds the direction into a source-grounded goal loop that writes a
+  file **to the workspace** and is graded. `land_winner` snapshots the workspace
+  before/after, so it reports `landed ✓` **only when files actually changed on
+  disk**; a verifier that passes on described-but-unwritten work is flagged, not
+  counted as success. Best for *new-code* tasks.
+- `--land-worktree [--merge]` — the real **repo-edit** path: it points the agent's
+  file tools at a fresh `git worktree` checkout, so the maker edits the actual
+  source files. **Git** is the source of truth — the change is committed on a
+  `land/<variant>` branch, `landed ✓` requires a real commit, and the main working
+  tree is never touched. The branch is left for review; `--merge` merges it in only
+  if it landed. Use this to edit existing files.
+
+`python main.py experiment "add a --quiet flag to doctor" --context-file doctor.py --context-file main.py --land-worktree`.
 
 ### Routines — scheduled / triggered runs (laptop-off)
 
