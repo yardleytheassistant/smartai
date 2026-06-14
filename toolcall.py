@@ -13,7 +13,8 @@ import json
 import re
 
 _TAG = re.compile(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", re.DOTALL | re.IGNORECASE)
-_FUNC_TAG = re.compile(r"<function=([\w-]+)>\s*(\{.*?\})\s*</function>", re.DOTALL | re.IGNORECASE)
+_FUNC_BLOCK = re.compile(r"<function=([\w.\-:]+)>(.*?)</function>", re.DOTALL | re.IGNORECASE)
+_PARAM = re.compile(r"<parameter=([\w.\-]+)>(.*?)</parameter>", re.DOTALL | re.IGNORECASE)
 
 
 def _normalize(obj: dict, idx: int) -> dict | None:
@@ -35,12 +36,23 @@ def parse_text_tool_calls(content: str, valid_names: set[str] | None = None) -> 
         return []
     calls: list[dict] = []
 
-    # <function=name>{...}</function> style (some Llama tunes).
-    for i, (name, body) in enumerate(_FUNC_TAG.findall(content)):
-        try:
-            args = json.loads(body)
-        except json.JSONDecodeError:
-            continue
+    # <function=name>...</function>. Args may be JSON ({...}) OR <parameter=k>v</parameter>
+    # tags (the "harmony"/GPT-OSS dialect that some Llama/Qwen-coder tunes emit). The
+    # parameter form is why an un-parsed call could leak into an answer as raw XML.
+    for i, (name, body) in enumerate(_FUNC_BLOCK.findall(content)):
+        args: dict | None = None
+        m = re.search(r"\{.*\}", body, re.DOTALL)
+        if m:
+            try:
+                args = json.loads(m.group(0))
+            except json.JSONDecodeError:
+                args = None
+        if args is None:
+            params = _PARAM.findall(body)
+            if params:
+                args = {k.strip(): v.strip() for k, v in params}
+        if args is None:
+            continue  # a <function=...> with neither JSON nor <parameter> args
         calls.append({"id": f"call_{i}", "name": name, "arguments": json.dumps(args)})
 
     # <tool_call>{...}</tool_call> style (Hermes / Qwen).

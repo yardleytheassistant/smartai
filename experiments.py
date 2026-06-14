@@ -110,7 +110,10 @@ def run_experiments(
             body = f"{task}\n\nApproach to try: {variant}"
             if context:
                 body = f"{_MAKER_CONTEXT_HEADER}\n\n{context}\n\n---\n\n{body}"
-            return subagents.delegate(body, client=client)
+            # With the source inlined, the maker should answer from the prompt, not
+            # try to read files — tool access here just makes it emit an un-executed
+            # read_file call that leaks into the graded output. So disable tools.
+            return subagents.delegate(body, client=client, use_tools=not context)
 
     if grade_fn is None:
         verifier = Verifier(client=client)

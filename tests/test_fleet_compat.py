@@ -62,6 +62,21 @@ def test_parse_function_tag_style():
     assert calls and calls[0]["name"] == "get_current_time"
 
 
+def test_parse_function_parameter_tag_dialect():
+    """<function=name><parameter=k>v</parameter></function> (harmony/GPT-OSS form):
+    args are tags, not JSON. Must be parsed, not leaked into the answer as raw XML."""
+    import json
+
+    import toolcall
+    content = (
+        "I'll read it.\n"
+        "<function=read_file><parameter=path>bench.py</parameter></function>"
+    )
+    calls = toolcall.parse_text_tool_calls(content, valid_names={"read_file"})
+    assert len(calls) == 1 and calls[0]["name"] == "read_file"
+    assert json.loads(calls[0]["arguments"]) == {"path": "bench.py"}
+
+
 def test_parse_rejects_non_tool_json():
     import toolcall
     # A plain JSON answer that isn't a registered tool must not be treated as a call.

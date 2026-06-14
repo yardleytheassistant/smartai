@@ -81,6 +81,7 @@ def test_run_experiments_grounds_maker_and_grader_in_context(monkeypatch):
 
     def fake_delegate(task, **kw):
         seen["maker_task"] = task
+        seen["use_tools"] = kw.get("use_tools", True)
         return "out"
 
     import subagents
@@ -108,6 +109,29 @@ def test_run_experiments_grounds_maker_and_grader_in_context(monkeypatch):
     assert "must fit" in seen["maker_task"].lower()
     # Grader saw the same source to grade fit against.
     assert "MARKER-SOURCE" in seen["grader_context"]
+    # With source inlined, tools are off so the maker answers from the prompt
+    # instead of emitting an un-executed read_file call.
+    assert seen["use_tools"] is False
+
+
+def test_delegate_passes_use_tools_through(monkeypatch):
+    """delegate(use_tools=False) builds a tool-less sub-agent (no file-read reflex)."""
+    import agent
+    import subagents
+
+    captured = {}
+
+    class FakeAgent:
+        def __init__(self, **kw):
+            captured.update(kw)
+
+        def run(self, task, on_tool=None):
+            return "ok"
+
+    monkeypatch.setattr(agent, "NovelAgent", FakeAgent)
+    out = subagents.delegate("do thing with inlined source", use_tools=False)
+    assert out == "ok"
+    assert captured["use_tools"] is False
 
 
 def test_build_context_reads_and_labels_files(tmp_path):

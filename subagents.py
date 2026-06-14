@@ -47,12 +47,15 @@ def delegate(
     model: str | None = None,
     client=None,
     load_memory: bool = True,
+    use_tools: bool = True,
     on_tool=None,
 ) -> str:
     """Run a subtask on a fresh sub-agent and return its answer.
 
     Model selection precedence: explicit `model` > `role` mapping > automatic
     routing by task shape. Refuses to recurse past config.subagent_max_depth.
+    `use_tools=False` makes the delegate answer from its prompt without the tool
+    loop — used when the relevant source is already inlined into the task.
     """
     depth = current_depth()
     if depth >= config.subagent_max_depth:
@@ -66,7 +69,10 @@ def delegate(
 
     _depth.value = depth + 1
     try:
-        agent = NovelAgent(model=chosen, client=client, load_memory=load_memory, skills_query=task)
+        agent = NovelAgent(
+            model=chosen, client=client, load_memory=load_memory,
+            use_tools=use_tools, skills_query=task,
+        )
         return agent.run(task, on_tool=on_tool)
     finally:
         _depth.value = depth
