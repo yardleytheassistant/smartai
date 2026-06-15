@@ -122,4 +122,60 @@ tools.py    # tool definitions + registry (sandboxed)
 agent.py    # the OpenAI-compatible tool-calling loop
 main.py     # CLI / REPL
 setup.sh    # one-time install for Ollama + Python env
+mirror/     # Polymarket copy-trading (mirror) bot — see below
 ```
+
+## Polymarket mirror bot
+
+`mirror/` is a self-contained copy-trading bot (independent of the Hermes
+agent — it needs no LLM). It watches a target wallet's on-chain trades and
+replicates each new one on your own account.
+
+**How it works**
+
+1. **Read** — polls the target's trade feed from Polymarket's public Data API
+   (`GET https://data-api.polymarket.com/activity?user=<wallet>&type=TRADE`).
+   Each TRADE entry gives the `asset` (the CLOB token id), `side`, `size`
+   (shares), `usdcSize`, `price`, and `transactionHash`.
+2. **Diff** — every fill has a stable key; already-copied keys are persisted to
+   `mirror_state.json` so a restart never double-trades. On the first run it
+   marks the target's existing history as *seen* and only copies trades from
+   then on (set `MIRROR_BACKFILL=1` to replay history instead).
+3. **Replicate** — for each new trade it places a market order on your account
+   via [`py-clob-client`](https://github.com/Polymarket/py-clob-client):
+   - a target **BUY** → a market BUY for `usdcSize × MIRROR_COPY_RATIO` USDC
+     (clamped to `MIRROR_MAX_USDC`),
+   - a target **SELL** → a market SELL of `size × MIRROR_COPY_RATIO` shares,
+     capped at the shares you actually hold.
+
+**Run it**
+
+```bash
+pip install -r requirements.txt
+cp .env.example .env          # set MIRROR_TARGET_WALLET (defaults to the watched wallet)
+python -m mirror              # DRY-RUN by default: logs orders, places none
+```
+
+When the dry-run output looks right, add your credentials to `.env`
+(`POLY_PRIVATE_KEY`, `POLY_FUNDER`, `POLY_SIGNATURE_TYPE`) and set
+`MIRROR_DRY_RUN=0` to trade for real. The bot refuses to start live if those
+are missing.
+
+**Key settings** (full list in `.env.example`)
+
+| Variable              | Default                | Purpose                                   |
+| --------------------- | ---------------------- | ----------------------------------------- |
+| `MIRROR_TARGET_WALLET`| the watched wallet     | Address to copy                           |
+| `MIRROR_DRY_RUN`      | `1`                    | `1` = simulate, `0` = place real orders   |
+| `MIRROR_COPY_RATIO`   | `1.0`                  | Scale vs. the target's size               |
+| `MIRROR_MIN_USDC`     | `1.0`                  | Skip dust trades below this               |
+| `MIRROR_MAX_USDC`     | `100.0`                | Hard cap per mirrored trade               |
+| `MIRROR_POLL_SECONDS` | `15`                   | How often to check for new trades         |
+| `MIRROR_ORDER_TYPE`   | `FOK`                  | `FOK` all-or-nothing, or `FAK` partials   |
+
+**Limits to be aware of** — copy-trading is best-effort, not a perfect clone.
+You see a trade only *after* it lands on-chain, so you enter a few seconds late
+and at the then-current book price (markets can move, and thin books can slip);
+fills depend on your own balance and available liquidity; and you must size
+mirrored SELLs to the shares you actually hold. Start in dry-run, keep
+`MIRROR_MAX_USDC` low, and only trade funds you can afford to lose.

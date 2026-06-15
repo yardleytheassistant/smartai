@@ -12,5 +12,9 @@ venv/
 # Agent workspace (scratch files the agent creates)
 workspace/
 
+# Mirror bot local state (which target trades have already been copied)
+mirror_state.json
+mirror_state.json.tmp
+
 # OS
 .DS_Store
