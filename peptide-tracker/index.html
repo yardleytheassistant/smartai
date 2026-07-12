@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="PeptideTrack" />
+  <meta name="theme-color" content="#0b0f14" />
+  <title>PeptideTrack</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 3 C16 3 6 15 6 21 a10 10 0 0 0 20 0 C26 15 16 3 16 3 Z' fill='%234dd4ac'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-inner">
+        <h1 id="viewTitle">Dashboard</h1>
+        <button id="settingsBtn" class="icon-btn" aria-label="Settings">⚙️</button>
+      </div>
+    </header>
+
+    <!-- Main scroll area -->
+    <main id="main">
+      <!-- Views injected by JS -->
+      <section id="view-home" class="view"></section>
+      <section id="view-calc" class="view hidden"></section>
+      <section id="view-log" class="view hidden"></section>
+      <section id="view-supplies" class="view hidden"></section>
+      <section id="view-peptides" class="view hidden"></section>
+    </main>
+
+    <!-- Bottom tab bar -->
+    <nav class="tabbar">
+      <button class="tab active" data-view="home"><span class="ti">🏠</span><span class="tl">Home</span></button>
+      <button class="tab" data-view="calc"><span class="ti">🧮</span><span class="tl">Dose</span></button>
+      <button class="tab" data-view="log"><span class="ti">💉</span><span class="tl">Log</span></button>
+      <button class="tab" data-view="supplies"><span class="ti">📦</span><span class="tl">Supplies</span></button>
+      <button class="tab" data-view="peptides"><span class="ti">🧪</span><span class="tl">Vials</span></button>
+    </nav>
+  </div>
+
+  <!-- Modal container -->
+  <div id="modalRoot"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
